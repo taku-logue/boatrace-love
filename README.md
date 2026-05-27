@@ -10,10 +10,11 @@ BOATRACE=LOVE MVPのローカル分析ダッシュボード用リポジトリで
 ## Git管理状況
 
 - ローカルGit: 初期化済み
-- 初回コミット: `77d8c6b Complete phase 1 project setup`
-- GitHubリポジトリ: 未作成
+- GitHubリポジトリ: https://github.com/taku-logue/boatrace-love
+- リモート: `origin`
+- 公開状態: `main` push済み
 
-GitHub公開はPhase 1の実装完了条件には含めない。現時点では、この環境に`gh`がなく、接続済みGitHub Appにもリポジトリ作成機能がないため、リモート作成とpushは未完了。
+GitHub公開は完了済み。Phase 2以降は作業ブランチを切って進める。
 
 ## 起動方法
 

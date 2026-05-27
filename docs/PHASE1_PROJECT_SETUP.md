@@ -751,8 +751,9 @@ Phase 1内の必須タスクに未完了項目はない。
 補足:
 
 - `zod`、`@tanstack/react-query`、`lucide-react`はPhase 1の疎通確認画面では未使用のため導入しない。API境界、非同期取得、UI部品が必要になるPhase 2以降で導入する。
-- ローカルGitは初期化済みで、初回コミット`77d8c6b Complete phase 1 project setup`を作成済み。
-- GitHubリポジトリ作成と初回pushは未完了。この環境では`gh`が未導入で、接続済みGitHub Appにもリポジトリ作成機能がないため、GitHub側のリポジトリ作成または`gh`認証後に実行する。
+- ローカルGitは初期化済み。
+- GitHubリポジトリ`taku-logue/boatrace-love`を作成済みで、`origin`として設定済み。
+- `main`ブランチの初回pushは完了済み。
 
 ### 24.4 次に進める順序
 
@@ -760,9 +761,9 @@ Phase 1は完了したため、次はPhase 2へ進む。
 
 Phase 2開始前に行うこと:
 
-1. GitHubリポジトリを作成し、ローカルの初回コミットをpushする
-2. Phase 2の作業ブランチを作成する
-3. 公式ダウンロードページ取得、LZH一覧抽出、Raw保存の実装に着手する
+1. Phase 2の作業ブランチを作成する
+2. 公式ダウンロードページ取得、LZH一覧抽出、Raw保存の実装に着手する
+3. 必要に応じてGitHub IssuesまたはProjectでPhase 2タスクを管理する
 
 ### 24.5 Phase 1未完了チェックリスト
 
@@ -775,6 +776,6 @@ Phase 1の必須タスクはすべて完了。
 | P1 | ルートREADMEを補完する | 完了 |
 | P1 | Web依存の扱いを決める | 完了。Phase 2以降で必要時に導入する。 |
 | P2 | Git管理状態を決める | 完了。ローカルGit初期化と初回コミットまで完了。 |
-| 関連 | GitHubリポジトリを作成してpushする | 未完了。`gh`導入またはGitHub上の手動作成後に実施する。 |
+| 関連 | GitHubリポジトリを作成してpushする | 完了。`taku-logue/boatrace-love`へ`main`をpush済み。 |
 
 Phase 1完了判定: 完了。
