@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: boatrace_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-boatrace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-boatrace_password}
+      POSTGRES_DB: ${POSTGRES_DB:-boatrace_love}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  api:
+    build:
+      context: ./apps/api
+    container_name: boatrace_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-boatrace}:${POSTGRES_PASSWORD:-boatrace_password}@postgres:5432/${POSTGRES_DB:-boatrace_love}
+    depends_on:
+      - postgres
+    restart: always
+
+  web:
+    build:
+      context: ./apps/web
+    container_name: boatrace_web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+      - API_INTERNAL_BASE_URL=http://api:8000
+    depends_on:
+      - api
+    restart: always
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.10.2
+    container_name: boatrace_mlflow
+    ports:
+      - "5000:5000"
+    command: mlflow server --host 0.0.0.0 --port 5000
+    volumes:
+      - ./mlruns:/mlruns
+    restart: always
+
+  prefect-server:
+    image: prefecthq/prefect:2-python3.11
+    container_name: boatrace_prefect
+    ports:
+      - "4200:4200"
+    command: prefect server start --host 0.0.0.0
+    restart: always
+
+volumes:
+  postgres_data:
