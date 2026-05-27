@@ -3,7 +3,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from .base import Base
 
-
 class DataSource(Base):
     __tablename__ = "data_sources"
     id = Column(Integer, primary_key=True, index=True)

@@ -5,8 +5,7 @@ from alembic import context
 
 # 1. 環境変数とモデルの読み込みを追加
 from app.core.config import settings
-from app.models.base import Base
-import app.models.management  # noqa: F401
+from app.models import Base
 
 config = context.config
 
