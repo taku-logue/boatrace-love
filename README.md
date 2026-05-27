@@ -7,6 +7,14 @@ BOATRACE=LOVE MVPのローカル分析ダッシュボード用リポジトリで
 - Phase 0: 完了
 - Phase 1: 完了
 
+## Git管理状況
+
+- ローカルGit: 初期化済み
+- 初回コミット: `77d8c6b Complete phase 1 project setup`
+- GitHubリポジトリ: 未作成
+
+GitHub公開はPhase 1の実装完了条件には含めない。現時点では、この環境に`gh`がなく、接続済みGitHub Appにもリポジトリ作成機能がないため、リモート作成とpushは未完了。
+
 ## 起動方法
 
 Docker Desktopを起動した状態で、以下を実行します。

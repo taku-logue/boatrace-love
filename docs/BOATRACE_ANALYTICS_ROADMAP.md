@@ -306,7 +306,11 @@ Phase 1は完了。
 
 未完了タスク:
 
-- なし
+- Phase 1内の必須タスクはなし
+
+関連残タスク:
+
+- GitHubリポジトリ作成と初回pushは未完了。ローカルGitは初期化済みで、初回コミット`77d8c6b Complete phase 1 project setup`まで完了している。この環境では`gh`が未導入で、接続済みGitHub Appにもリポジトリ作成機能がないため、GitHub側のリポジトリ作成または`gh`認証後にpushする。
 
 ## Phase 2: 過去データ取得・LZH解凍
 
