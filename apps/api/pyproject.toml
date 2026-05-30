@@ -21,6 +21,7 @@ dependencies = [
     "mlflow>=2.13.0",
     "pandera>=0.18.3",
     "griffe<1.0.0",
+    "requests>=2.34.2",
 ]
 
 [dependency-groups]
