@@ -5,7 +5,18 @@ from alembic import context
 
 # 1. 環境変数とモデルの読み込みを追加
 from app.core.config import settings
-from app.models import Base
+from app.models.base import Base
+from app.models.management import DataSource, IngestionRun, RawFile
+from app.models.downloads import DownloadFile
+from app.models.racer_period_stats import RacerPeriodStatRaw, RacerPeriodStat
+from app.models.race_master import Venue, Race
+from app.models.race_cards import RaceCardRaw, RaceEntry
+from app.models.race_results import RaceResultRaw, RaceResult
+from app.models.payouts import Payout
+from app.models.race_master import Venue, Race
+from app.models.race_cards import RaceCardRaw, RaceEntry
+from app.models.race_results import RaceResultRaw, RaceResult
+from app.models.payouts import Payout
 
 config = context.config
 
