@@ -1,5 +1,6 @@
 from datetime import date
 
+
 def generate_race_id(race_date: date, venue_code: str, race_no: int) -> str:
     """
     開催日、場コード、レース番号から一意のレースIDを生成する。

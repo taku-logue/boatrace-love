@@ -1,7 +1,17 @@
-from sqlalchemy import Column, BigInteger, Integer, String, Text, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    BigInteger,
+    Integer,
+    String,
+    Text,
+    DateTime,
+    ForeignKey,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from .base import Base
+
 
 class Payout(Base):
     __tablename__ = "payouts"
@@ -15,5 +25,5 @@ class Payout(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint('race_id', 'bet_type', 'combination', name='uq_payouts_race_bet_comb'),
+        UniqueConstraint("race_id", "bet_type", "combination", name="uq_payouts_race_bet_comb"),
     )

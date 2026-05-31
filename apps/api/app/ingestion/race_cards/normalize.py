@@ -1,6 +1,9 @@
-def normalize_race_card_fields(raw_fields: dict[str, str]) -> dict[str, any]:
+from typing import Any
+
+
+def normalize_race_card_fields(raw_fields: dict[str, str]) -> dict[str, Any]:
     """番組表のパース結果を型変換・正規化する"""
-    norm = {}
+    norm: dict[str, Any] = {}
 
     def to_float(val: str) -> float | None:
         try:

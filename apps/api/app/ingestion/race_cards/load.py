@@ -1,15 +1,20 @@
+from typing import Any
+
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
+
 from app.models.race_master import Race
 from app.models.race_cards import RaceCardRaw, RaceEntry
 
+
 def upsert_race_cards(
-    session,
-    race_records: list[dict],
-    raw_records: list[dict],
-    entry_records: list[dict],
+    session: Session,
+    race_records: list[dict[str, Any]],
+    raw_records: list[dict[str, Any]],
+    entry_records: list[dict[str, Any]],
 ) -> None:
     """番組表関連テーブルへのUpsert処理"""
-    
+
     # 1. races へのUpsert (番組表起点)
     if race_records:
         race_stmt = insert(Race).values(race_records)

@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 import sys
 import os
+
 # プロジェクト内のモジュールを読み込むためのパス設定
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../apps/api")))
 
@@ -18,19 +19,23 @@ from app.models.management import DataSource
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 def get_or_create_source(session) -> int:
     """ボートレース公式データのデータソースIDを取得（なければ作成）"""
-    source = session.execute(select(DataSource).where(DataSource.name == "BOAT RACE Official")).scalar_one_or_none()
+    source = session.execute(
+        select(DataSource).where(DataSource.name == "BOAT RACE Official")
+    ).scalar_one_or_none()
     if not source:
         source = DataSource(
             name="BOAT RACE Official",
             base_url="https://www.boatrace.jp",
-            description="BOAT RACE公式データダウンロードページ"
+            description="BOAT RACE公式データダウンロードページ",
         )
         session.add(source)
         session.commit()
         session.refresh(source)
     return source.id
+
 
 def main():
     base_url = "https://www.boatrace.jp/owpc/pc/extra/data/download.html"
@@ -62,46 +67,49 @@ def main():
         from sqlalchemy.sql import func
 
         for a in lzh_links:
-            full_url = urljoin(base_url, a['href'])
-            filename = full_url.split('/')[-1] # 例: fan2510.lzh
+            full_url = urljoin(base_url, a["href"])
+            filename = full_url.split("/")[-1]  # 例: fan2510.lzh
             display_name = " ".join(a.text.split())
 
             # ファイル名から年度と期を正規表現で抽出
-            match = re.search(r'fan(\d{2})(\d{2})\.lzh', filename)
+            match = re.search(r"fan(\d{2})(\d{2})\.lzh", filename)
             if not match:
                 continue
 
             year_short = int(match.group(1))
             month = match.group(2)
-            
+
             # 西暦4桁に変換 (2000年代前提)
             period_year = 2000 + year_short
             period_term = "first_half" if month == "10" else "second_half"
 
             # DBへUpsert（既にあれば更新、なければ挿入）するクエリ
-            stmt = insert(DownloadFile).values(
-                source_id=source_id,
-                data_type="racer_period_stats",
-                period_year=period_year,
-                period_term=period_term,
-                display_name=display_name,
-                source_url=full_url,
-                source_filename=filename,
-                status="discovered"
-            ).on_conflict_do_update(
-                index_elements=['data_type', 'period_year', 'period_term', 'source_url'],
-                set_=dict(
-                    last_seen_at=func.now(),
+            stmt = (
+                insert(DownloadFile)
+                .values(
+                    source_id=source_id,
+                    data_type="racer_period_stats",
+                    period_year=period_year,
+                    period_term=period_term,
                     display_name=display_name,
-                    source_filename=filename
+                    source_url=full_url,
+                    source_filename=filename,
+                    status="discovered",
+                )
+                .on_conflict_do_update(
+                    index_elements=["data_type", "period_year", "period_term", "source_url"],
+                    set_=dict(
+                        last_seen_at=func.now(), display_name=display_name, source_filename=filename
+                    ),
                 )
             )
 
             session.execute(stmt)
-            inserted_count += 1 
-            
+            inserted_count += 1
+
         session.commit()
         print(f"🎉 DBへの登録（Upsert）が完了しました！ (処理件数: {inserted_count}件)")
+
 
 if __name__ == "__main__":
     main()

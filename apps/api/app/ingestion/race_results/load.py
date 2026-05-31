@@ -1,17 +1,22 @@
+from typing import Any
+
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
+
 from app.models.race_master import Race
 from app.models.race_results import RaceResultRaw, RaceResult
 from app.models.payouts import Payout
 
+
 def upsert_race_results(
-    session,
-    race_records: list[dict],
-    raw_records: list[dict],
-    result_records: list[dict],
-    payout_records: list[dict],
+    session: Session,
+    race_records: list[dict[str, Any]],
+    raw_records: list[dict[str, Any]],
+    result_records: list[dict[str, Any]],
+    payout_records: list[dict[str, Any]],
 ) -> None:
     """競走成績関連テーブルへのUpsert処理"""
-    
+
     # 1. races へのUpsert (競走成績起点)
     if race_records:
         race_stmt = insert(Race).values(race_records)
@@ -56,7 +61,7 @@ def upsert_race_results(
             },
         )
         session.execute(result_stmt)
-        
+
     if payout_records:
         payout_stmt = insert(Payout).values(payout_records)
         payout_stmt = payout_stmt.on_conflict_do_update(

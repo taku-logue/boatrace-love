@@ -299,8 +299,7 @@ apps/api/app/
 ```text
 scripts/
   phase2_discover_racer_period_stats.py
-  phase2_ingest_racer_period_stats.py
-  phase2_validate_racer_period_stats.py
+  phase2_run_all_pipeline.py
 ```
 
 テスト:
@@ -526,8 +525,7 @@ docker compose exec api uv run python ../../scripts/phase2_discover_racer_period
 Phase 2 ingest:
 
 ```bash
-docker compose exec api uv run python ../../scripts/phase2_ingest_racer_period_stats.py --limit 1
-docker compose exec api uv run python ../../scripts/phase2_validate_racer_period_stats.py
+docker compose exec api uv run python ../../scripts/phase2_run_all_pipeline.py
 ```
 
 ## 17. リスクと対応

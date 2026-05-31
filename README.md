@@ -6,6 +6,8 @@ BOATRACE=LOVE MVPのローカル分析ダッシュボード用リポジトリで
 
 - Phase 0: 完了
 - Phase 1: 完了
+- Phase 2: 完了
+- Phase 3: 進行中
 
 ## Git管理状況
 
@@ -15,6 +17,12 @@ BOATRACE=LOVE MVPのローカル分析ダッシュボード用リポジトリで
 - 公開状態: `main` push済み
 
 GitHub公開は完了済み。Phase 2以降は作業ブランチを切って進める。
+
+## 主要ドキュメント
+
+- `docs/BOATRACE_ANALYTICS_ROADMAP.md`: 全体ロードマップ
+- `docs/PROJECT_STRUCTURE_AND_FILE_INVENTORY.md`: 現在のフォルダ・ファイル構成と配置ルール
+- `docs/PHASE3_RACE_RESULTS_AND_CARDS_INGESTION.md`: Phase 3の現状、完了条件、残タスク
 
 ## 起動方法
 
@@ -58,6 +66,7 @@ pnpm test:e2e
 
 ```bash
 docker compose exec api uv run alembic current
+docker compose exec api uv run alembic upgrade head
 docker compose exec postgres psql -U boatrace -d boatrace_love -c "\\dt"
 ```
 
@@ -92,3 +101,12 @@ MLflow Trackingは http://localhost:5000 で確認できます。
 - Webの`format:check`、`lint`、`test:e2e`が成功する
 - PrefectサンプルFlowが成功する
 - MLflow dummy runが登録できる
+
+## Phase 3 現状メモ
+
+詳細は`docs/PHASE3_RACE_RESULTS_AND_CARDS_INGESTION.md`を参照。
+
+- 番組表Bファイルと競走成績Kファイルのパーサー、正規化、DB Upsert処理は実装が進行中
+- DB上では`races`、`race_entries`、`race_results`、`payouts`への投入を確認済み
+- ただし、Phase 3の`download_files`、`raw_files`、`ingestion_runs`連携、Raw行保存、SHA-256、文字コードメタデータは未完了
+- API品質コマンドは通過済み。ただし、Phase 3専用fixture/pytestは未実装

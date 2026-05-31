@@ -1,7 +1,18 @@
-from sqlalchemy import Column, BigInteger, Integer, String, Text, Numeric, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    BigInteger,
+    Integer,
+    String,
+    Text,
+    Numeric,
+    DateTime,
+    ForeignKey,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from .base import Base
+
 
 class RaceResultRaw(Base):
     __tablename__ = "race_result_raw"
@@ -17,8 +28,9 @@ class RaceResultRaw(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint('download_file_id', 'line_number', name='uq_race_result_raw_file_line'),
+        UniqueConstraint("download_file_id", "line_number", name="uq_race_result_raw_file_line"),
     )
+
 
 class RaceResult(Base):
     __tablename__ = "race_results"
@@ -35,6 +47,4 @@ class RaceResult(Base):
     normalized_values = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint('race_id', 'boat_no', name='uq_race_results_race_boat'),
-    )
+    __table_args__ = (UniqueConstraint("race_id", "boat_no", name="uq_race_results_race_boat"),)
