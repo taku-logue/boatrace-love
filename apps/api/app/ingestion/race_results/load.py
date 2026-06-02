@@ -35,6 +35,7 @@ def upsert_race_results(
         raw_stmt = raw_stmt.on_conflict_do_update(
             index_elements=["download_file_id", "line_number"],
             set_={
+                "raw_file_id": raw_stmt.excluded.raw_file_id,
                 "raw_text": raw_stmt.excluded.raw_text,
                 "raw_fields": raw_stmt.excluded.raw_fields,
                 "parse_status": raw_stmt.excluded.parse_status,
@@ -68,6 +69,8 @@ def upsert_race_results(
             index_elements=["race_id", "bet_type", "combination"],
             set_={
                 "payout_yen": payout_stmt.excluded.payout_yen,
+                "popularity": payout_stmt.excluded.popularity,
+                "raw_values": payout_stmt.excluded.raw_values,
             },
         )
         session.execute(payout_stmt)

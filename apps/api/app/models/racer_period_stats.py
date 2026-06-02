@@ -18,6 +18,14 @@ class RacerPeriodStatRaw(Base):
     parser_version = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+    __table_args__ = (
+        UniqueConstraint(
+            "download_file_id",
+            "line_number",
+            name="uq_racer_period_stats_raw_file_line",
+        ),
+    )
+
 
 class RacerPeriodStat(Base):
     __tablename__ = "racer_period_stats"

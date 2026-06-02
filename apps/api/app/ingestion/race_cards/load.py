@@ -33,6 +33,7 @@ def upsert_race_cards(
         raw_stmt = raw_stmt.on_conflict_do_update(
             index_elements=["download_file_id", "line_number"],
             set_={
+                "raw_file_id": raw_stmt.excluded.raw_file_id,
                 "raw_text": raw_stmt.excluded.raw_text,
                 "raw_fields": raw_stmt.excluded.raw_fields,
                 "parse_status": raw_stmt.excluded.parse_status,

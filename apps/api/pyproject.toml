@@ -22,6 +22,7 @@ dependencies = [
     "pandera>=0.18.3",
     "griffe<1.0.0",
     "requests>=2.34.2",
+    "lxml>=6.1.1",
 ]
 
 [dependency-groups]
