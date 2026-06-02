@@ -20,6 +20,11 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-boatrace}:${POSTGRES_PASSWORD:-boatrace_password}@postgres:5432/${POSTGRES_DB:-boatrace_love}
+      - BOATRACE_DATA_DIR=/data
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    volumes:
+      - ./data:/data
+      - ./scripts:/scripts
     depends_on:
       - postgres
     restart: always
