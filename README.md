@@ -8,6 +8,7 @@ BOATRACE=LOVE MVPのローカル分析ダッシュボード用リポジトリで
 - Phase 1: 完了
 - Phase 2: 完了
 - Phase 3: 進行中
+- Phase 4: 進行中
 
 ## Git管理状況
 
@@ -181,4 +182,60 @@ docker compose exec api uv run python /scripts/phase3_run_all_pipeline.py \
   --from-date 2026-05-30 \
   --to-date 2026-05-30 \
   --dry-run
+```
+
+## Phase 4 現状メモ
+
+詳細は`docs/PHASE4_REALTIME_DATA_INGESTION.md`を参照。
+
+- 当日開催場、出走表、直前情報、単勝オッズの取得/parser/load導線を実装済み
+- `live_fetch_status`、`weather_observations`、`pre_race_entry_infos`、`odds_snapshots`、`odds_snapshot_entries`を現行schemaとして使用
+- Raw HTMLは`data/raw/html/{race_cards|exhibition|odds}/YYYYMMDD/`に保存し、`raw_files`、SHA-256、取得URL、`ingestion_runs`へ記録する
+- `phase4_run_live_pipeline.py`で対象日、場、R、取得種別、dry-run、sleep、retry/backoff、timeoutを指定できる
+- `phase4_prefect_flow.py`はPhase 4 CLIを呼ぶ薄いPrefect wrapper
+- `phase4_check_quality.py`で出走表、直前情報、気象、単勝オッズ、取得失敗statusを検査できる
+- 2026-06-01、場コード23、1Rの通常CLI実行とPrefect dry-runを確認済み
+- 残タスクは単勝以外のオッズ取得範囲、部品交換の専用カラム化、1日全場の通常実行検証、HTML構造変更検知の詳細化
+
+## Phase 4 実行コマンド
+
+DB migration:
+
+```bash
+cd apps/api
+uv run alembic upgrade head
+```
+
+dry-run:
+
+```bash
+cd apps/api
+uv run python ../../scripts/phase4_run_live_pipeline.py \
+  --race-date 2026-06-01 \
+  --venue-code 23 \
+  --race-no 1 \
+  --only all \
+  --dry-run \
+  --sleep-seconds 0
+```
+
+通常実行:
+
+```bash
+cd apps/api
+uv run python ../../scripts/phase4_run_live_pipeline.py \
+  --race-date 2026-06-01 \
+  --venue-code 23 \
+  --race-no 1 \
+  --only all \
+  --sleep-seconds 0 \
+  --http-retries 1
+```
+
+品質チェック:
+
+```bash
+cd apps/api
+uv run python ../../scripts/phase4_check_quality.py \
+  --race-date 2026-06-01
 ```

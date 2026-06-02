@@ -10,7 +10,11 @@ from app.models import (  # noqa: F401
     DataSource,
     DownloadFile,
     IngestionRun,
+    LiveFetchStatus,
+    OddsSnapshot,
+    OddsSnapshotEntry,
     Payout,
+    PreRaceEntryInfo,
     Race,
     RaceCardRaw,
     RaceEntry,
@@ -20,9 +24,8 @@ from app.models import (  # noqa: F401
     RacerPeriodStatRaw,
     RawFile,
     Venue,
+    WeatherObservation,
 )
-from app.models.pre_race_info import PreRaceInfo
-from app.models.odds import OddsSnapshot
 
 config = context.config
 

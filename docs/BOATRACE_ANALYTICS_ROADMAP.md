@@ -1,7 +1,7 @@
 # ボートレース予想分析Webアプリ 開発ロードマップ
 
 作成日: 2026-05-22
-更新日: 2026-06-01
+更新日: 2026-06-03
 
 ## 1. 目的
 
@@ -460,18 +460,29 @@ Phase 3は進行中。
 - 直前情報保存
 - 取得状況監視画面の土台
 
-### 2026-06-01時点の進捗
+### 2026-06-03時点の進捗
 
-Phase 4は未着手。設計ドキュメントを作成済み。
+Phase 4は進行中。MVP導線として、当日開催場、出走表、直前情報、気象、単勝オッズの取得、Raw保存、DB保存、品質チェック、Prefect dry-runまで確認済み。
 
-進捗目安: 0%
+進捗目安: 85%
 
-次に行うこと:
+完了または実装済み:
 
-- 当日ページのURL、HTML構造、取得可否を確認する
-- Phase 4用DBテーブル案を確定する
-- Raw HTML保存とfetch共通処理を作る
-- 1場の当日出走表をdry-run、Raw保存、DB投入できる最小CLIを作る
+- `6c2f1a91b8e7`でPhase 4 snapshot系テーブルを現行schemaへ統一した
+- 当日開催場、出走表、直前情報、単勝オッズのparser/loadを実装した
+- Raw HTMLを分類保存し、`raw_files`、SHA-256、取得URL、`ingestion_runs`、`live_fetch_status`を記録できる
+- `phase4_run_live_pipeline.py`で対象日、場、R、種別、dry-run、sleep、retry/backoff、timeoutを指定できる
+- `phase4_prefect_flow.py`でPhase 4 CLIのPrefect dry-run Completedを確認した
+- `phase4_check_quality.py`で2026-06-01の24レース検査passを確認した
+- Phase 4 parser pytestとDB Upsert冪等性pytestを追加した
+
+主な残タスク:
+
+- 単勝以外のオッズ取得範囲を決める
+- 部品交換を専用カラム化するか、`raw_values`保持のままにするか決める
+- 1日全場の通常実行を低頻度で検証する
+- HTML構造変更検知をparserエラー率として記録する
+- API確認エンドポイントをPhase 7/8の画面要件と合わせて設計する
 
 参照: `docs/PHASE4_REALTIME_DATA_INGESTION.md`
 

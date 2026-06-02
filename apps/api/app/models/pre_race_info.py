@@ -1,33 +1,66 @@
-from sqlalchemy import Column, BigInteger, Integer, String, Text, Numeric, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
+
 from .base import Base
 
-class PreRaceInfo(Base):
-    """レース直前情報（展示タイム・チルト・部品交換・気象など）"""
-    __tablename__ = "pre_race_info"
+
+class LiveFetchStatus(Base):
+    __tablename__ = "live_fetch_status"
+
     id = Column(BigInteger, primary_key=True, index=True)
-    race_id = Column(String, ForeignKey("races.race_id"), nullable=False, index=True)
-    boat_no = Column(Integer, nullable=False)
-    
-    # 展示情報
+    race_date = Column(Date, nullable=False, index=True)
+    venue_code = Column(String(2), nullable=False, index=True)
+    race_no = Column(Integer)
+    data_kind = Column(Text, nullable=False)
+    source_url = Column(Text, nullable=False)
+    status = Column(Text, nullable=False)
+    raw_file_id = Column(BigInteger, ForeignKey("raw_files.id"))
+    ingestion_run_id = Column(BigInteger, ForeignKey("ingestion_runs.id"))
+    fetched_at = Column(DateTime(timezone=True), nullable=False)
+    error_message = Column(Text)
+    row_count = Column(Integer)
+    file_metadata = Column("metadata", JSONB, server_default="{}", nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class WeatherObservation(Base):
+    __tablename__ = "weather_observations"
+
+    race_id = Column(String, ForeignKey("races.race_id"), primary_key=True)
+    fetched_at = Column(DateTime(timezone=True), primary_key=True)
+    weather = Column(Text)
+    temperature = Column(Numeric)
+    wind_direction = Column(Text)
+    wind_speed = Column(Numeric)
+    water_temperature = Column(Numeric)
+    wave_height = Column(Numeric)
+    raw_values = Column(JSONB, server_default="{}", nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PreRaceEntryInfo(Base):
+    __tablename__ = "pre_race_entry_infos"
+
+    race_id = Column(String, ForeignKey("races.race_id"), primary_key=True)
+    boat_no = Column(Integer, primary_key=True)
+    fetched_at = Column(DateTime(timezone=True), primary_key=True)
     exhibition_time = Column(Numeric)
     tilt_angle = Column(Numeric)
     start_exhibition_course = Column(Integer)
     start_exhibition_timing = Column(Numeric)
-    
-    # 気象・水面情報 (レース単位だが便宜上ここに持たせるか、後で分離)
-    weather = Column(Text)
-    temperature = Column(Numeric)
-    water_temperature = Column(Numeric)
-    wave_height = Column(Integer)
-    wind_direction = Column(Text)
-    wind_speed = Column(Integer)
-    
-    raw_values = Column(JSONB)
+    raw_values = Column(JSONB, server_default="{}", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-
-    __table_args__ = (
-        UniqueConstraint('race_id', 'boat_no', name='uq_pre_race_info_race_boat'),
-    )
