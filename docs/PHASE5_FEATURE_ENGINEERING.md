@@ -27,8 +27,14 @@ Phase 5完了時点で目指す状態:
 
 - Phase 2: `racer_period_stats`、`racer_period_stats_raw`
 - Phase 3: `races`、`race_entries`、`race_results`、`payouts`、`race_card_raw`、`race_result_raw`
-- Phase 4: `pre_race_entry_infos`、`weather_observations`、`odds_snapshots`、`odds_snapshot_entries`
+- Phase 4: MVP完了済み。`pre_race_entry_infos`、`weather_observations`、`odds_snapshots`、`odds_snapshot_entries`、`live_fetch_status`
 - 共通: `data_sources`、`ingestion_runs`、`raw_files`
+
+Phase 4から引き継ぐ確定事項:
+
+- Phase 4のオッズ入力は現時点では単勝のみ。複勝、2連系、3連系オッズはPhase 4拡張後にP2特徴量として追加する
+- 部品交換は専用カラムではなく、`pre_race_entry_infos.raw_values.parts_replaced`に保持する。Phase 5 MVPではJSONから抽出する方針にする
+- `live_fetch_status.metadata.parser_error_count`を当日データの品質ゲート候補として使う。0以外のrace/dateは特徴量生成前に警告または除外する
 
 引き継ぐ原則:
 
@@ -63,7 +69,8 @@ Phase 5完了時点で目指す状態:
 | `racer_period_stats` | 期別勝率、級別など | 対象レース日以前に確定している期の値だけ使う |
 | `pre_race_entry_infos` | 展示タイム、チルト、展示進入、展示ST | 展示後モデル用。展示前モデルでは除外 |
 | `weather_observations` | 気温、水温、風、波、天候 | 展示後/直前モデル用 |
-| `odds_snapshot_entries` | 単勝オッズ | オッズ込みモデル用。オッズなしモデルでは除外 |
+| `odds_snapshot_entries` | 単勝オッズ | オッズ込みモデル用。オッズなしモデルでは除外。現Phase 4 MVPでは`bet_type = 'win'`のみ |
+| `live_fetch_status` | 当日データ取得・parser品質の確認 | 特徴量にはしない。`parser_error_count`やfailed statusを品質ゲートに使う |
 
 ## 5. データ粒度
 
@@ -154,7 +161,7 @@ MVPで作る目的変数:
 | チルト | `pre_race_entry_infos.tilt_angle` | P0 |
 | 展示進入 | `pre_race_entry_infos.start_exhibition_course` | P0 |
 | 展示ST | `pre_race_entry_infos.start_exhibition_timing` | P0 |
-| 部品交換 | `pre_race_entry_infos.raw_values` | P1 |
+| 部品交換 | `pre_race_entry_infos.raw_values.parts_replaced` | P1 |
 | 展示タイム順位 | 同一`race_id`内で算出 | P1 |
 | 展示タイム平均との差 | 同一`race_id`内で算出 | P1 |
 
@@ -168,6 +175,11 @@ MVPで作る目的変数:
 | オッズsnapshot時刻 | `odds_snapshots.fetched_at` | P1 |
 | オッズ変化率 | 複数snapshot | P2 |
 | 複勝/2連系/3連系オッズ | Phase 4拡張後 | P2 |
+
+補足:
+
+- Phase 5 MVPのオッズ特徴量は単勝のみで進める
+- 単勝以外のオッズはPhase 4で取得範囲を拡張してから追加する
 
 ## 8. 未来情報混入防止ルール
 
@@ -203,6 +215,7 @@ Phase 5で最重要のルール:
 - `is_missing_weather`
 - `is_missing_pre_race`
 - `is_missing_odds`
+- `has_phase4_parser_error`
 
 ## 10. 推奨テーブル案
 
@@ -298,6 +311,8 @@ Phase 5品質チェック:
 - P0特徴量の欠損率が閾値以下
 - `race_entries`と`race_results`のjoin率が閾値以上
 - `racer_period_stats` join率が閾値以上
+- Phase 4入力を使うmodel viewでは、対象日の`live_fetch_status.status = 'failed'`がない
+- Phase 4入力を使うmodel viewでは、対象日の`live_fetch_status.metadata.parser_error_count`が0
 - 結果系カラムがfeature columnsに混入していない
 - 日付分割時に学習期間より未来の情報を使っていない
 - 出力Parquetの行数、カラム数、schemaが記録されている
@@ -331,7 +346,7 @@ Phase 5品質チェック:
 | P5-103 | レース結果から教師ラベルを作る | 未着手 | `target_win`などを生成できる |
 | P5-104 | 気象特徴量をjoinする | 未着手 | `weather_observations`を`race_id`でjoinできる |
 | P5-105 | 展示特徴量をjoinする | 未着手 | `pre_race_entry_infos`を`race_id, boat_no`でjoinできる |
-| P5-106 | 単勝オッズ特徴量をjoinする | 未着手 | latest snapshotまたは指定snapshotをjoinできる |
+| P5-106 | 単勝オッズ特徴量をjoinする | 未着手 | `bet_type = 'win'`のlatest snapshotまたは指定snapshotをjoinできる |
 | P5-107 | 欠損フラグを作る | 未着手 | P0/P1欠損状態を明示できる |
 
 ### 14.3 P0: 出力・品質
@@ -340,7 +355,7 @@ Phase 5品質チェック:
 |---|---|---|---|
 | P5-201 | 特徴量生成CLIを作る | 未着手 | 対象期間、場、model view、dry-runを指定できる |
 | P5-202 | Parquet出力を作る | 未着手 | `data/processed/features/`へ保存できる |
-| P5-203 | 品質チェックを作る | 未着手 | 行数、欠損、重複、join率、target整合を検査できる |
+| P5-203 | 品質チェックを作る | 未着手 | 行数、欠損、重複、join率、target整合、Phase 4 failed/parser errorを検査できる |
 | P5-204 | pytestを追加する | 未着手 | labels、leakage、build、qualityの基本仕様を固定する |
 | P5-205 | API品質コマンドを通す | 未着手 | ruff/format/mypy/pytestが通る |
 
@@ -361,7 +376,7 @@ Phase 5品質チェック:
 |---|---|---|---|
 | P5-401 | 複勝/2連系/3連系オッズ特徴量を作る | 未着手 | Phase 4で取得後に追加 |
 | P5-402 | 記者予想特徴量を作る | 未着手 | Phase 4/後続で取得可否確認後 |
-| P5-403 | 部品交換専用特徴量を作る | 未着手 | `raw_values`から専用カラム化方針を決める |
+| P5-403 | 部品交換専用特徴量を作る | 未着手 | MVPでは`raw_values.parts_replaced`から抽出。専用カラム化は必要になった段階で検討 |
 | P5-404 | DB保存テーブルを作る | 未着手 | Parquet運用で不足したら追加 |
 | P5-405 | Prefect Flow化する | 未着手 | CLIが安定してから薄いwrapperを作る |
 
@@ -373,6 +388,7 @@ Phase 5の完了条件:
 - `target_win`を持つ学習用datasetを作れる
 - 出走表、選手期別、気象、展示、単勝オッズのMVP特徴量が入っている
 - オッズなし/ありのfeature viewを切り替えられる
+- Phase 4入力を使うfeature viewでは、failed statusと`parser_error_count`を品質チェックできる
 - 未来情報混入防止ルールがpytestで固定されている
 - P0特徴量の欠損、重複、join率を品質チェックできる
 - ParquetまたはDBへdatasetを保存できる

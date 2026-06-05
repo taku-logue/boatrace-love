@@ -26,6 +26,7 @@ class QualitySummary:
     weather_errors: int = 0
     odds_errors: int = 0
     fetch_errors: int = 0
+    parser_errors: int = 0
 
     @property
     def passed(self) -> bool:
@@ -35,6 +36,7 @@ class QualitySummary:
             + self.weather_errors
             + self.odds_errors
             + self.fetch_errors
+            + self.parser_errors
             == 0
         )
 
@@ -183,6 +185,22 @@ def check_quality(target_date: date) -> QualitySummary:
             )
             if summary.fetch_errors:
                 print(f"[fetch] {date_prefix}: failed fetch records={summary.fetch_errors}")
+
+            summary.parser_errors = int(
+                conn.execute(
+                    text(
+                        """
+                        SELECT count(*)
+                        FROM live_fetch_status
+                        WHERE race_date = :race_date
+                          AND COALESCE((metadata ->> 'parser_error_count')::integer, 0) > 0
+                        """
+                    ),
+                    {"race_date": target_date},
+                ).scalar_one()
+            )
+            if summary.parser_errors:
+                print(f"[parser] {date_prefix}: parser issue records={summary.parser_errors}")
     except SQLAlchemyError as exc:
         raise RuntimeError(f"Phase 4 quality check failed: {exc}") from exc
 
@@ -193,6 +211,7 @@ def check_quality(target_date: date) -> QualitySummary:
     print(f"  weather_errors: {summary.weather_errors}")
     print(f"  odds_errors: {summary.odds_errors}")
     print(f"  fetch_errors: {summary.fetch_errors}")
+    print(f"  parser_errors: {summary.parser_errors}")
     print("  status: passed" if summary.passed else "  status: failed")
     return summary
 

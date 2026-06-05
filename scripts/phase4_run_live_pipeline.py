@@ -45,6 +45,7 @@ PAGE_PATHS = {
     "pre_race": "beforeinfo",
     "odds": "oddstf",
 }
+EXPECTED_BOAT_ROWS = 6
 
 
 @dataclass(frozen=True)
@@ -223,6 +224,15 @@ def record_fetch_status(
     )
 
 
+def parser_metadata(*, parser_version: str, parsed_rows: int) -> dict[str, Any]:
+    return {
+        "parser_version": parser_version,
+        "expected_rows": EXPECTED_BOAT_ROWS,
+        "parsed_rows": parsed_rows,
+        "parser_error_count": max(EXPECTED_BOAT_ROWS - parsed_rows, 0),
+    }
+
+
 def fetch_active_venues(target_date: date, retry: HttpRetryConfig) -> list[str]:
     url = build_url("venues", target_date)
     html = fetch_with_retry(url, retry)
@@ -288,6 +298,10 @@ def process_live_race_card(
     for race_record in race_records:
         race_record["raw_card_file_id"] = raw_file.id
 
+    metadata = parser_metadata(
+        parser_version="phase4_live_race_cards_v1",
+        parsed_rows=len(entry_records),
+    )
     if not entry_records:
         record_fetch_status(
             session,
@@ -301,6 +315,7 @@ def process_live_race_card(
             raw_file_id=raw_file.id,
             ingestion_run_id=ingestion_run_id,
             row_count=0,
+            metadata=metadata,
         )
         return False
 
@@ -317,6 +332,7 @@ def process_live_race_card(
         raw_file_id=raw_file.id,
         ingestion_run_id=ingestion_run_id,
         row_count=len(entry_records),
+        metadata=metadata,
     )
     return True
 
@@ -378,6 +394,10 @@ def process_live_beforeinfo(
     if records:
         upsert_pre_race_info(session, records, fetched_at)
 
+    metadata = parser_metadata(
+        parser_version="phase4_live_beforeinfo_v1",
+        parsed_rows=len(records),
+    )
     record_fetch_status(
         session,
         target_date=target_date,
@@ -390,6 +410,7 @@ def process_live_beforeinfo(
         raw_file_id=raw_file.id,
         ingestion_run_id=ingestion_run_id,
         row_count=len(records),
+        metadata=metadata,
     )
 
 
@@ -451,6 +472,10 @@ def process_live_odds(
     if records:
         upsert_odds_snapshots(session, records)
 
+    metadata = parser_metadata(
+        parser_version="phase4_live_oddstf_v1",
+        parsed_rows=len(records),
+    )
     record_fetch_status(
         session,
         target_date=target_date,
@@ -463,6 +488,7 @@ def process_live_odds(
         raw_file_id=raw_file.id,
         ingestion_run_id=ingestion_run_id,
         row_count=len(records),
+        metadata=metadata,
     )
 
 
