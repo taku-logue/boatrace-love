@@ -15,7 +15,18 @@ HEADERS = {
     )
 }
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+
+def _resolve_repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "apps").exists() and (parent / "data").exists():
+            return parent
+        if (parent / "app").exists() and (parent / "pyproject.toml").exists():
+            return parent
+    return current.parents[-1]
+
+
+REPO_ROOT = _resolve_repo_root()
 
 HTML_PAGE_TYPE_DIRS = {
     "racelist": "race_cards",

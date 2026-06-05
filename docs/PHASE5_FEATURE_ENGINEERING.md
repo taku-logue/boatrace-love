@@ -1,411 +1,341 @@
-# Phase 5 特徴量設計・学習用データセット作成 設計書
+# Phase 5 特徴量設計・学習用データセット作成
 
 作成日: 2026-06-03
-更新日: 2026-06-03
-ステータス: 設計ドキュメント作成済み / 実装未着手
-進捗目安: 5%
+更新日: 2026-06-05
+対象ブランチ: `phase5-feature-engineering`
+ステータス: MVP完了
+進捗: 100%
 
-## 1. Phase 5の目的
+## 1. 目的
 
-Phase 5では、Phase 2からPhase 4で蓄積したDBを使い、機械学習モデルが読める特徴量テーブルと学習用データセットを作る。
+Phase 5では、Phase 2からPhase 4までにDBへ蓄積したデータを使い、Phase 6の機械学習モデルへ渡せる艇単位の学習用データセットを作る。
 
-MVPでは、1レース6艇それぞれを1行とし、「その艇が1着になるか」を二値分類の教師ラベルにする。Phase 6のLightGBMモデルにそのまま渡せる、再現可能で未来情報混入のないデータセットを作ることを目標にする。
-
-Phase 5完了時点で目指す状態:
-
-- `race_id`と`boat_no`単位の特徴量行を作れる
-- 1着ラベル、2連対ラベル、3連対ラベル候補を作れる
-- 過去成績、選手、出走表、レース場、季節、直前情報、気象、単勝オッズを特徴量化できる
-- 未来情報混入を防ぐルールをコードとテストで固定できる
-- 学習用datasetをPostgreSQLまたはParquetへ保存できる
-- 欠損、範囲外、重複、join率を品質チェックできる
-- Phase 6で学習scriptから安定して読み込める
-
-## 2. 前提
-
-前提となる成果物:
-
-- Phase 2: `racer_period_stats`、`racer_period_stats_raw`
-- Phase 3: `races`、`race_entries`、`race_results`、`payouts`、`race_card_raw`、`race_result_raw`
-- Phase 4: MVP完了済み。`pre_race_entry_infos`、`weather_observations`、`odds_snapshots`、`odds_snapshot_entries`、`live_fetch_status`
-- 共通: `data_sources`、`ingestion_runs`、`raw_files`
-
-Phase 4から引き継ぐ確定事項:
-
-- Phase 4のオッズ入力は現時点では単勝のみ。複勝、2連系、3連系オッズはPhase 4拡張後にP2特徴量として追加する
-- 部品交換は専用カラムではなく、`pre_race_entry_infos.raw_values.parts_replaced`に保持する。Phase 5 MVPではJSONから抽出する方針にする
-- `live_fetch_status.metadata.parser_error_count`を当日データの品質ゲート候補として使う。0以外のrace/dateは特徴量生成前に警告または除外する
-
-引き継ぐ原則:
-
-- joinキーは必ず`race_id`を使う
-- 艇単位特徴量の主キーは`(race_id, boat_no)`にする
-- Rawファイルを特徴量生成の主入力にしない。DB正規化済みテーブルから作る
-- `race_results`、`payouts`は教師ラベルや検証用であり、予測時特徴量に混ぜない
-- 当日予測で使えない情報を学習時特徴量に入れない
-- オッズありモデルとオッズなしモデルを分けられるようにする
-
-## 3. Phase 5でまだ作らないもの
-
-以下はPhase 5では作らない。
-
-- LightGBMなどの本格モデル学習
-- ハイパーパラメータ探索
-- SHAP、Feature Importanceレポート
-- 買い目生成
-- 期待値に基づく購入判断
-- バックテストの詳細シミュレーション
-- Web API/画面への予測結果表示
-- 記者予想特徴量
-
-## 4. 入力データと利用方針
-
-| 入力 | 用途 | 注意 |
-|---|---|---|
-| `races` | レース日、場、R番号、距離など | すべての特徴量の親 |
-| `race_entries` | 艇番、選手登番、級別、支部、モーター、ボート | 予測時に使える出走表情報 |
-| `race_results` | 着順、進入、ST、決まり手 | 教師ラベル、過去成績集計に使う。対象レース自身は除外 |
-| `payouts` | 払戻、人気 | 回収率/期待値検証用。予測特徴量には入れない |
-| `racer_period_stats` | 期別勝率、級別など | 対象レース日以前に確定している期の値だけ使う |
-| `pre_race_entry_infos` | 展示タイム、チルト、展示進入、展示ST | 展示後モデル用。展示前モデルでは除外 |
-| `weather_observations` | 気温、水温、風、波、天候 | 展示後/直前モデル用 |
-| `odds_snapshot_entries` | 単勝オッズ | オッズ込みモデル用。オッズなしモデルでは除外。現Phase 4 MVPでは`bet_type = 'win'`のみ |
-| `live_fetch_status` | 当日データ取得・parser品質の確認 | 特徴量にはしない。`parser_error_count`やfailed statusを品質ゲートに使う |
-
-## 5. データ粒度
-
-MVPの基本粒度:
+MVPの単位は次の通り。
 
 ```text
 1 race_id x 1 boat_no = 1 feature row
 ```
 
-1レースは原則6行になる。
+Phase 5 MVPでは、以下を完了条件にした。
 
-主キー候補:
+- 出走表、選手期別成績、過去成績、直前情報、気象、単勝オッズをDBから結合できる
+- `target_win`、`target_top2`、`target_top3`、`exclude_reason`を生成できる
+- `pre_race_no_odds`、`pre_race_with_odds`、`exhibition_with_odds`の3種類のmodel viewを切り替えられる
+- 結果系カラムや目的変数が特徴量側に混入しないことをコードとテストで検知できる
+- 欠損フラグ、重複、6艇揃い、目的変数整合、必須特徴量欠損、Phase 4 status/parser errorを品質チェックできる
+- Parquetへ保存し、保存後に読み戻してschema台帳を残せる
+- Docker ComposeのAPIコンテナからCLIで再現できる
 
-```text
-(race_id, boat_no, feature_set_version)
-```
+## 2. 現在の完了状態
 
-保存先候補:
+Phase 5 MVPは完了。
 
-- PostgreSQL: 再利用しやすい正規化済み特徴量テーブル
-- Parquet: 学習処理で高速に読み込むdataset
-- `data/processed/features/`: Parquet保存先候補
+確認済みの実DB/CLI結果:
 
-## 6. 目的変数
+| model view | 対象 | 結果 | 保存 |
+|---|---|---:|---|
+| `pre_race_no_odds` | 2026-05-30 全場 | 1080行 / 45カラム、品質チェックpass | `dataset_boat_features_v1_pre_race_no_odds.parquet` |
+| `pre_race_with_odds` | 2026-06-01 場23 1R | 6行 / 49カラム、品質チェックpass | `dataset_boat_features_v1_pre_race_with_odds.parquet` |
+| `exhibition_with_odds` | 2026-06-01 場23 1R | 6行 / 63カラム、品質チェックpass | `dataset_boat_features_v1_exhibition_with_odds.parquet` |
 
-MVPで作る目的変数:
-
-| カラム | 定義 | 用途 |
-|---|---|---|
-| `target_win` | `finish_position = 1`なら1 | Phase 6 MVPの主目的 |
-| `target_top2` | `finish_position <= 2`なら1 | 後続モデル候補 |
-| `target_top3` | `finish_position <= 3`なら1 | 後続モデル候補 |
-| `finish_position` | 実着順 | 分析/検証用。特徴量には使わない |
-
-注意:
-
-- 欠場、失格、不成立などの扱いはPhase 5で明示的に決める
-- MVPでは、通常完走レースを中心にdatasetを作る
-- 特殊ケースは除外理由を`exclude_reason`として残す
-
-## 7. 特徴量グループ
-
-### 7.1 出走表特徴量
-
-| 特徴量 | 元テーブル | 優先度 |
-|---|---|---|
-| 艇番 | `race_entries.boat_no` | P0 |
-| 選手登番 | `race_entries.racer_registration_no` | P0 |
-| 級別 | `race_entries.racer_class` | P0 |
-| 支部 | `race_entries.branch` | P0 |
-| モーター番号 | `race_entries.motor_no` | P0 |
-| ボート番号 | `race_entries.boat_no_assigned` | P0 |
-| レース場 | `races.venue_code` | P0 |
-| R番号 | `races.race_no` | P0 |
-| 距離 | `races.distance_m` | P1 |
-| グレード | `races.grade` | P1 |
-
-### 7.2 選手基礎特徴量
-
-| 特徴量 | 元テーブル | 優先度 |
-|---|---|---|
-| 期別勝率/2連対率/3連対率 | `racer_period_stats` | P0 |
-| 級別 | `racer_period_stats`または`race_entries` | P0 |
-| 支部 | `racer_period_stats`または`race_entries` | P0 |
-| 直近30走の1着率/2連対率/3連対率 | `race_results`過去分 | P1 |
-| 直近60走の1着率/2連対率/3連対率 | `race_results`過去分 | P1 |
-| 平均ST、ST標準偏差 | `race_results`過去分 | P1 |
-| コース別成績 | `race_results.entry_course` | P1 |
-| 当地成績 | `races.venue_code` + `race_results` | P1 |
-
-### 7.3 レース場・環境特徴量
-
-| 特徴量 | 元テーブル | 優先度 |
-|---|---|---|
-| 場コード | `races.venue_code` | P0 |
-| R番号 | `races.race_no` | P0 |
-| 月、季節、曜日 | `races.race_date` | P0 |
-| 気温、水温、風速、波高 | `weather_observations` | P0 |
-| 風向 | `weather_observations.wind_direction` | P1 |
-| 天候 | `weather_observations.weather` | P1 |
-| 場別イン逃げ率 | 過去`race_results` | P1 |
-
-### 7.4 直前・展示特徴量
-
-| 特徴量 | 元テーブル | 優先度 |
-|---|---|---|
-| 展示タイム | `pre_race_entry_infos.exhibition_time` | P0 |
-| チルト | `pre_race_entry_infos.tilt_angle` | P0 |
-| 展示進入 | `pre_race_entry_infos.start_exhibition_course` | P0 |
-| 展示ST | `pre_race_entry_infos.start_exhibition_timing` | P0 |
-| 部品交換 | `pre_race_entry_infos.raw_values.parts_replaced` | P1 |
-| 展示タイム順位 | 同一`race_id`内で算出 | P1 |
-| 展示タイム平均との差 | 同一`race_id`内で算出 | P1 |
-
-### 7.5 オッズ特徴量
-
-| 特徴量 | 元テーブル | 優先度 |
-|---|---|---|
-| 単勝オッズ | `odds_snapshot_entries` | P0 |
-| 単勝人気順位 | 同一snapshot内で算出 | P0 |
-| 市場確率 | `1 / odds`から算出 | P1 |
-| オッズsnapshot時刻 | `odds_snapshots.fetched_at` | P1 |
-| オッズ変化率 | 複数snapshot | P2 |
-| 複勝/2連系/3連系オッズ | Phase 4拡張後 | P2 |
+各Parquetの横に`.schema.json`を出力し、行数、カラム数、dtype一覧を保存する。
 
 補足:
 
-- Phase 5 MVPのオッズ特徴量は単勝のみで進める
-- 単勝以外のオッズはPhase 4で取得範囲を拡張してから追加する
+- 2026-06-01 場23の教師ラベルはPhase 3 CLIで`race_results`を追加投入し、12R/72行を確認した。
+- 2026-06-01 場23のPhase 4データは1R分が揃っていたため、Phase 5 CLIへ`--race-no`を追加し、完全な6艇sliceとして検証した。
+- 全12RのPhase 4補完実行はタイムアウトした。これはPhase 4運用リハーサル側の課題であり、Phase 5 MVPの完了条件からは外す。
 
-## 8. 未来情報混入防止ルール
+## 3. 実装範囲
 
-Phase 5で最重要のルール:
+### 3.1 Feature modules
 
-- 対象レース自身の`race_results`を特徴量集計に含めない
-- 対象レース日より後の`racer_period_stats`を使わない
-- rolling成績は対象レースより前のレースだけで集計する
-- `payouts`は特徴量にしない
-- `finish_position`、`decision`、`result_status`は目的変数/検証用であり特徴量にしない
-- オッズなしモデルでは`odds_snapshot_entries`を使わない
-- 展示前モデルでは`pre_race_entry_infos`と`weather_observations`を使わない
+| ファイル | 役割 |
+|---|---|
+| `apps/api/app/features/labels.py` | `race_results`から`target_win`、`target_top2`、`target_top3`、`exclude_reason`を作る |
+| `apps/api/app/features/leakage.py` | `finish_position`、`result_status`、`target_*`などの未来情報混入を検知する |
+| `apps/api/app/features/aggregations.py` | 直近30/60/90走、コース別、場別の過去成績特徴量をshift付きで作る |
+| `apps/api/app/features/build.py` | DBから出走表、期別成績、過去成績、直前情報、気象、単勝オッズ、ラベルを結合する |
+| `apps/api/app/features/quality.py` | 学習用datasetの品質チェックとPhase 4 status/parser error確認を行う |
+| `apps/api/app/features/export.py` | Parquet保存、保存後読み戻し、schema JSON出力を行う |
 
-テストで固定すること:
+### 3.2 CLI
 
-- 対象レース自身をrolling集計から除外できている
-- future dateの期別成績をjoinしない
-- dataset内で`target_*`や結果系カラムがfeature columnsに混ざらない
-
-## 9. 欠損処理ルール
-
-初期方針:
-
-- P0特徴量の欠損は品質チェックで警告または除外
-- P1/P2特徴量の欠損は欠損フラグを追加して補完
-- 数値特徴量は原則`NULL`を残し、モデル前処理で扱う
-- カテゴリ特徴量は`unknown`を許容するかPhase 5で決める
-- 除外した行は`exclude_reason`に理由を残す
-
-欠損フラグ例:
-
-- `is_missing_period_stats`
-- `is_missing_weather`
-- `is_missing_pre_race`
-- `is_missing_odds`
-- `has_phase4_parser_error`
-
-## 10. 推奨テーブル案
-
-Phase 5で追加候補のテーブル:
-
-| テーブル | 目的 | 主なキー |
-|---|---|---|
-| `feature_sets` | 特徴量セット定義とversion管理 | `id` |
-| `boat_feature_snapshots` | 艇単位特徴量の保存 | `(race_id, boat_no, feature_set_id)` |
-| `training_datasets` | 学習dataset出力単位の台帳 | `id` |
-| `training_dataset_rows` | dataset行の参照/抽出結果 | `(dataset_id, race_id, boat_no)` |
-
-MVPではテーブルを増やしすぎず、まずParquet出力から始めてもよい。
-
-Parquet候補:
-
-```text
-data/processed/features/phase5_boat_features_v1.parquet
-data/processed/features/phase5_training_dataset_v1.parquet
-```
-
-## 11. ディレクトリ案
-
-Phase 5で追加する候補:
-
-```text
-apps/api/app/features/
-  __init__.py
-  labels.py
-  leakage.py
-  build.py
-  quality.py
-  export.py
-
-apps/api/tests/features/
-  test_labels.py
-  test_leakage.py
-  test_build.py
-  test_quality.py
-
-scripts/
-  phase5_build_features.py
-  phase5_check_features.py
-  phase5_prefect_flow.py
-
-data/processed/features/
-  .gitkeep
-```
-
-配置方針:
-
-- DB読み出し、特徴量生成ロジックは`apps/api/app/features/`へ置く
-- CLIは`scripts/phase5_build_features.py`へ置く
-- PrefectはCLIを薄く呼ぶwrapperにする
-- 実データParquetはGit管理しない
-
-## 12. CLI案
-
-```bash
-cd apps/api
-uv run python ../../scripts/phase5_build_features.py \
-  --from-date 2026-05-30 \
-  --to-date 2026-06-01 \
-  --feature-set-version boat_features_v1 \
-  --model-view pre_race_with_odds \
-  --output-format parquet \
-  --dry-run
-```
-
-引数案:
+`scripts/phase5_build_features.py`で以下を指定できる。
 
 ```text
 --from-date
 --to-date
 --venue-code
+--race-no
 --feature-set-version
 --model-view pre_race_no_odds|pre_race_with_odds|exhibition_with_odds
---output-format parquet|db
+--output-format parquet
 --data-root
---dry-run
 --skip-quality
+--dry-run
 ```
 
-## 13. 品質チェック案
+Docker ComposeのAPIコンテナからの実行例:
 
-Phase 5品質チェック:
+```bash
+docker compose exec -T api env PYTHONUNBUFFERED=1 uv run python /scripts/phase5_build_features.py \
+  --from-date 2026-06-01 \
+  --to-date 2026-06-01 \
+  --venue-code 23 \
+  --race-no 1 \
+  --model-view exhibition_with_odds \
+  --feature-set-version boat_features_v1
+```
 
-- 1レースあたりfeature rowが原則6件
+## 4. 作成済み特徴量
+
+### 4.1 出走表・レース基礎
+
+- `race_id`
+- `race_date`
+- `venue_code`
+- `race_no`
+- `grade`
+- `distance_m`
+- `boat_no`
+- `racer_registration_no`
+- `racer_name`
+- `racer_class`
+- `branch`
+- `motor_no`
+- `boat_no_assigned`
+
+### 4.2 選手期別成績
+
+- `period_year`
+- `period_term`
+- `racer_period_class`
+- `racer_period_branch`
+- `racer_win_rate`
+- `racer_top2_rate`
+
+期別成績は、レース日以前に利用可能とみなせる期だけをjoinする。前期は5月1日、後期は11月1日を利用可能日の近似として扱う。
+
+### 4.3 過去成績集計
+
+すべて対象レース自身を含めないshift付き集計。
+
+- `recent_win_rate_30`
+- `recent_win_rate_60`
+- `recent_win_rate_90`
+- `recent_top2_rate_30`
+- `recent_top2_rate_60`
+- `recent_top2_rate_90`
+- `recent_top3_rate_30`
+- `recent_top3_rate_60`
+- `recent_top3_rate_90`
+- `course_win_rate`
+- `course_top2_rate`
+- `course_top3_rate`
+- `venue_win_rate`
+- `venue_top2_rate`
+- `venue_top3_rate`
+
+### 4.4 直前・展示・気象
+
+`model_view='exhibition_with_odds'`で利用する。
+
+- `exhibition_time`
+- `tilt_angle`
+- `start_exhibition_course`
+- `start_exhibition_timing`
+- `parts_replaced_count`
+- `has_parts_replaced`
+- `exhibition_time_rank`
+- `exhibition_time_diff`
+- `weather`
+- `temperature`
+- `wind_direction`
+- `wind_speed`
+- `water_temperature`
+- `wave_height`
+
+### 4.5 単勝オッズ
+
+`model_view='pre_race_with_odds'`または`model_view='exhibition_with_odds'`で利用する。
+
+- `win_odds`
+- `win_popularity`
+- `market_probability`
+- `odds_fetched_at`
+
+Phase 4 MVPでは単勝オッズのみを保存している。複勝、2連単、2連複、3連単、3連複などのオッズ特徴量はPhase 4拡張後に追加する。
+
+### 4.6 欠損・品質補助
+
+- `is_missing_period_stats`
+- `is_missing_pre_race`
+- `is_missing_weather`
+- `is_missing_odds`
+
+## 5. 目的変数
+
+| カラム | 定義 | 用途 |
+|---|---|---|
+| `target_win` | `finish_position == 1` | Phase 6 MVPの主目的変数 |
+| `target_top2` | `finish_position <= 2` | 後続モデル評価用 |
+| `target_top3` | `finish_position <= 3` | 後続モデル評価用 |
+| `exclude_reason` | 欠場、失格、着順欠損などの除外理由 | 学習対象filter用 |
+
+`finish_position`自体は特徴量に入れない。
+
+## 6. 品質チェック
+
+`validate_dataset_quality()`で確認する項目:
+
+- datasetが空ではない
 - `(race_id, boat_no)`が重複しない
-- `target_win`の合計が通常レースでは1
-- `target_top2`の合計が通常レースでは2
-- `target_top3`の合計が通常レースでは3
-- P0特徴量の欠損率が閾値以下
-- `race_entries`と`race_results`のjoin率が閾値以上
-- `racer_period_stats` join率が閾値以上
-- Phase 4入力を使うmodel viewでは、対象日の`live_fetch_status.status = 'failed'`がない
-- Phase 4入力を使うmodel viewでは、対象日の`live_fetch_status.metadata.parser_error_count`が0
-- 結果系カラムがfeature columnsに混入していない
-- 日付分割時に学習期間より未来の情報を使っていない
-- 出力Parquetの行数、カラム数、schemaが記録されている
+- 1レース内の`target_win`合計が1を超えない
+- 通常6艇レースでは`target_win=1`、`target_top2=2`、`target_top3=3`になる
+- `race_count * 6`に対する行充足率が95%以上
+- `racer_class`、`racer_win_rate`が存在し、欠損率が5%以下
+- `is_missing_*`欠損フラグが存在する
+- view別必須特徴量が存在し、欠損率が5%以下
+- Phase 4由来のviewでは`live_fetch_status.status='failed'`がなく、`parser_error_count=0`
 
-## 14. タスク一覧と優先順位
+`export_dataset_to_parquet()`では、保存後に読み戻して行数とカラム順を確認し、`.schema.json`へschemaを記録する。
 
-優先度:
+## 7. 完了タスク
 
-| 優先度 | 意味 |
-|---|---|
-| P0 | Phase 5 MVP完了に必須 |
-| P1 | Phase 5内で完了させたい |
-| P2 | Phase 6以降へ送ってよい |
-
-### 14.1 P0: 設計・土台
-
-| ID | タスク | 状態 | 完了条件 |
+| ID | 優先度 | タスク | 状態 |
 |---|---|---|---|
-| P5-001 | Phase 5用ブランチを作る | 未着手 | `codex/phase5-feature-engineering`などで作業する |
-| P5-002 | 特徴量の粒度を確定する | 未着手 | `(race_id, boat_no)`を基本行に固定する |
-| P5-003 | 目的変数を定義する | 未着手 | `target_win`、`target_top2`、`target_top3`を生成できる |
-| P5-004 | 未来情報混入ルールを文書化する | 未着手 | 禁止カラム、as-of条件、rolling除外条件を明文化する |
-| P5-005 | Phase 5ディレクトリを作る | 未着手 | `apps/api/app/features/`、`apps/api/tests/features/`を作る |
+| P5-001 | P0 | Phase 5用ブランチと設計docを作る | 完了 |
+| P5-002 | P0 | `(race_id, boat_no)`単位のdataset粒度を固定する | 完了 |
+| P5-003 | P0 | `target_win`、`target_top2`、`target_top3`を生成する | 完了 |
+| P5-004 | P0 | 未来情報混入防止ルールを実装・pytest化する | 完了 |
+| P5-005 | P0 | `apps/api/app/features/`とtestsを追加する | 完了 |
+| P5-101 | P0 | 出走表・レース基礎特徴量を作る | 完了 |
+| P5-102 | P0 | レーサー期別特徴量をas-of joinする | 完了 |
+| P5-103 | P0 | 教師ラベルを結合する | 完了 |
+| P5-104 | P0 | 気象特徴量をjoinする | 完了 |
+| P5-105 | P0 | 展示・部品交換特徴量をjoinする | 完了 |
+| P5-106 | P0 | 単勝オッズ特徴量をjoinする | 完了 |
+| P5-107 | P0 | 欠損フラグ列をdatasetへ追加する | 完了 |
+| P5-201 | P0 | Phase 5 CLIを作る | 完了 |
+| P5-202 | P0 | Parquet保存とschema記録を作る | 完了 |
+| P5-203 | P0 | dataset品質チェックを作る | 完了 |
+| P5-204 | P0 | Phase 5 pytestを追加する | 完了 |
+| P5-205 | P0 | ruff、format、mypy、pytestを通す | 完了 |
+| P5-301 | P1 | 直近30/60/90走特徴量を作る | 完了 |
+| P5-302 | P1 | コース別成績特徴量を作る | 完了 |
+| P5-303 | P1 | 場別成績特徴量を作る | 完了 |
+| P5-304 | P1 | 展示タイム順位・平均との差を作る | 完了 |
+| P5-305 | P1 | 単勝人気順位・市場確率を作る | 完了 |
+| P5-306 | P1 | 場別の勝率/2連対率/3連対率を過去成績から作る | 完了 |
 
-### 14.2 P0: MVP特徴量
+Phase 5 MVPとしての未完了タスクはなし。
 
-| ID | タスク | 状態 | 完了条件 |
-|---|---|---|---|
-| P5-101 | 出走表特徴量を作る | 未着手 | 艇番、選手、級別、支部、モーター、ボート、場、R番号を生成 |
-| P5-102 | レーサー期別特徴量をjoinする | 未着手 | 対象日以前の期別成績をjoinできる |
-| P5-103 | レース結果から教師ラベルを作る | 未着手 | `target_win`などを生成できる |
-| P5-104 | 気象特徴量をjoinする | 未着手 | `weather_observations`を`race_id`でjoinできる |
-| P5-105 | 展示特徴量をjoinする | 未着手 | `pre_race_entry_infos`を`race_id, boat_no`でjoinできる |
-| P5-106 | 単勝オッズ特徴量をjoinする | 未着手 | `bet_type = 'win'`のlatest snapshotまたは指定snapshotをjoinできる |
-| P5-107 | 欠損フラグを作る | 未着手 | P0/P1欠損状態を明示できる |
+## 8. Phase 6以降へ送るもの
 
-### 14.3 P0: 出力・品質
+以下はPhase 5 MVPの完了条件から外し、後続Phaseで扱う。
 
-| ID | タスク | 状態 | 完了条件 |
-|---|---|---|---|
-| P5-201 | 特徴量生成CLIを作る | 未着手 | 対象期間、場、model view、dry-runを指定できる |
-| P5-202 | Parquet出力を作る | 未着手 | `data/processed/features/`へ保存できる |
-| P5-203 | 品質チェックを作る | 未着手 | 行数、欠損、重複、join率、target整合、Phase 4 failed/parser errorを検査できる |
-| P5-204 | pytestを追加する | 未着手 | labels、leakage、build、qualityの基本仕様を固定する |
-| P5-205 | API品質コマンドを通す | 未着手 | ruff/format/mypy/pytestが通る |
+- LightGBMなどのモデル学習
+- ハイパーパラメータ探索
+- SHAP/Feature Importance
+- 期待値計算
+- 買い目生成
+- バックテスト
+- DB上の永続Feature Storeテーブル
+- Phase 5専用Prefect Flow
+- 単勝以外のオッズ特徴量
+- 記者予想特徴量
+- 直接対決、同期、同支部などの関係特徴量
+- モーター・ボートの高度な履歴特徴量
 
-### 14.4 P1: 拡張特徴量
+## 9. 検証ログ
 
-| ID | タスク | 状態 | 完了条件 |
-|---|---|---|---|
-| P5-301 | 直近30/60/90走特徴量を作る | 未着手 | 対象レース前だけでrolling集計できる |
-| P5-302 | コース別成績を作る | 未着手 | 進入コース別の1着率/連対率を作れる |
-| P5-303 | 当地成績を作る | 未着手 | 場別の過去成績を作れる |
-| P5-304 | 展示順位/平均との差を作る | 未着手 | 同一レース内で相対値を作れる |
-| P5-305 | 単勝人気順位/市場確率を作る | 未着手 | 単勝オッズから算出できる |
-| P5-306 | 場別傾向特徴量を作る | 未着手 | イン逃げ率などを過去データから作れる |
+2026-06-05時点で確認済み。
 
-### 14.5 P2: 後続候補
+```bash
+cd apps/api
+uv run ruff format app tests ../../scripts
+uv run ruff check app tests ../../scripts
+uv run mypy app
+uv run pytest tests/features -q
+uv run pytest -q
+```
 
-| ID | タスク | 状態 | 完了条件 |
-|---|---|---|---|
-| P5-401 | 複勝/2連系/3連系オッズ特徴量を作る | 未着手 | Phase 4で取得後に追加 |
-| P5-402 | 記者予想特徴量を作る | 未着手 | Phase 4/後続で取得可否確認後 |
-| P5-403 | 部品交換専用特徴量を作る | 未着手 | MVPでは`raw_values.parts_replaced`から抽出。専用カラム化は必要になった段階で検討 |
-| P5-404 | DB保存テーブルを作る | 未着手 | Parquet運用で不足したら追加 |
-| P5-405 | Prefect Flow化する | 未着手 | CLIが安定してから薄いwrapperを作る |
+結果:
 
-## 15. Phase 5完了条件
+```text
+All checks passed
+Success: no issues found in 44 source files
+19 passed
+52 passed
+```
 
-Phase 5の完了条件:
+Docker Compose上の実DB確認:
 
-- `(race_id, boat_no)`単位のfeature rowsを生成できる
-- `target_win`を持つ学習用datasetを作れる
-- 出走表、選手期別、気象、展示、単勝オッズのMVP特徴量が入っている
-- オッズなし/ありのfeature viewを切り替えられる
-- Phase 4入力を使うfeature viewでは、failed statusと`parser_error_count`を品質チェックできる
-- 未来情報混入防止ルールがpytestで固定されている
-- P0特徴量の欠損、重複、join率を品質チェックできる
-- ParquetまたはDBへdatasetを保存できる
-- README、ロードマップ、構成台帳にPhase 5実行手順が反映されている
-- `ruff check`、`ruff format --check`、`mypy app`、`pytest`が通る
+```bash
+docker compose exec -T api env PYTHONUNBUFFERED=1 uv run python /scripts/phase5_build_features.py \
+  --from-date 2026-05-30 \
+  --to-date 2026-05-30 \
+  --model-view pre_race_no_odds \
+  --feature-set-version boat_features_v1
+```
 
-## 16. 最初に進める順番
+結果:
 
-推奨順:
+```text
+1080行 / 45カラム
+row_completeness_rate: 100.00%
+品質チェックpass
+Parquet保存pass
+```
 
-1. `apps/api/app/features/`と`apps/api/tests/features/`を作る
-2. label生成の`labels.py`とpytestを作る
-3. leakage防止の`leakage.py`とpytestを作る
-4. 出走表 + 結果labelだけの最小datasetを作る
-5. 期別成績、気象、展示、単勝オッズを順番にjoinする
-6. 欠損/重複/join率の品質チェックを作る
-7. Parquet出力CLIを作る
-8. README、ロードマップ、構成台帳を更新する
+```bash
+docker compose exec -T api env PYTHONUNBUFFERED=1 uv run python /scripts/phase5_build_features.py \
+  --from-date 2026-06-01 \
+  --to-date 2026-06-01 \
+  --venue-code 23 \
+  --race-no 1 \
+  --model-view pre_race_with_odds \
+  --feature-set-version boat_features_v1
+```
 
-最初の実装単位は、`--from-date`、`--to-date`、`--model-view pre_race_no_odds`で、出走表と結果だけを使った`target_win`付きdatasetをdry-run/Parquet出力できるところまでにする。
+結果:
+
+```text
+6行 / 49カラム
+row_completeness_rate: 100.00%
+missing_rate_win_odds: 0.00%
+品質チェックpass
+Parquet保存pass
+```
+
+```bash
+docker compose exec -T api env PYTHONUNBUFFERED=1 uv run python /scripts/phase5_build_features.py \
+  --from-date 2026-06-01 \
+  --to-date 2026-06-01 \
+  --venue-code 23 \
+  --race-no 1 \
+  --model-view exhibition_with_odds \
+  --feature-set-version boat_features_v1
+```
+
+結果:
+
+```text
+6行 / 63カラム
+row_completeness_rate: 100.00%
+missing_rate_exhibition_time: 0.00%
+missing_rate_wind_speed: 0.00%
+missing_rate_win_odds: 0.00%
+品質チェックpass
+Parquet保存pass
+```
+
+## 10. 注意点
+
+- 生成済みParquetとschema JSONは`data/processed/features/`に出るが、Git管理しない。
+- Phase 5 CLIはPhase 6の学習入力を作るための導線であり、モデル学習はまだ行わない。
+- `pre_race_no_odds`は展示・気象・オッズを使わない事前予測用view。
+- `pre_race_with_odds`は単勝オッズ込み、展示なしの比較用view。
+- `exhibition_with_odds`は展示・気象・単勝オッズ込みの直前予測用view。
+- Phase 4の全場/全Rリハーサルは運用検証として後続で実施する。Phase 5 MVPは、完全に揃った6艇sliceで3ビューの生成・品質・保存を確認済み。

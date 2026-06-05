@@ -9,7 +9,7 @@ BOATRACE=LOVE MVPのローカル分析ダッシュボード用リポジトリで
 - Phase 2: 完了
 - Phase 3: 進行中
 - Phase 4: MVP完了
-- Phase 5: 設計ドキュメント作成済み / 実装未着手
+- Phase 5: MVP完了
 
 ## Git管理状況
 
@@ -242,4 +242,41 @@ uv run python ../../scripts/phase4_run_live_pipeline.py \
 cd apps/api
 uv run python ../../scripts/phase4_check_quality.py \
   --race-date 2026-06-01
+```
+
+## Phase 5 現状メモ
+
+詳細は`docs/PHASE5_FEATURE_ENGINEERING.md`を参照。
+
+- Phase 5 MVPは完了
+- `apps/api/app/features/`に特徴量生成、ラベル生成、リーク検知、品質チェック、Parquet出力、過去成績集計を実装済み
+- `scripts/phase5_build_features.py`で対象期間、場コード、R番号、model view、dry-run、Parquet出力、data root、品質チェックskipを指定できる
+- `pre_race_no_odds`は2026-05-30分で1080行、45カラムのdataset生成、品質チェック、Parquet保存、schema記録を確認済み
+- `pre_race_with_odds`は2026-06-01 場23 1Rで6行、49カラムのdataset生成、品質チェック、Parquet保存、schema記録を確認済み
+- `exhibition_with_odds`は2026-06-01 場23 1Rで6行、63カラムのdataset生成、品質チェック、Parquet保存、schema記録を確認済み
+- Phase 5 MVPの残タスクはなし。モデル学習、期待値、買い目、バックテスト、単勝以外のオッズ特徴量はPhase 6以降へ送る
+
+## Phase 5 実行コマンド
+
+Docker ComposeのAPIコンテナから実行する場合:
+
+```bash
+docker compose exec -T api env PYTHONUNBUFFERED=1 uv run python /scripts/phase5_build_features.py \
+  --from-date 2026-05-30 \
+  --to-date 2026-05-30 \
+  --model-view pre_race_no_odds \
+  --feature-set-version boat_features_v1 \
+  --dry-run
+```
+
+展示・オッズ込みviewを1R単位で確認する場合:
+
+```bash
+docker compose exec -T api env PYTHONUNBUFFERED=1 uv run python /scripts/phase5_build_features.py \
+  --from-date 2026-06-01 \
+  --to-date 2026-06-01 \
+  --venue-code 23 \
+  --race-no 1 \
+  --model-view exhibition_with_odds \
+  --feature-set-version boat_features_v1
 ```

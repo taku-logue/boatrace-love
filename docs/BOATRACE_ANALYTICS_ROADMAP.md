@@ -582,6 +582,39 @@ Phase 4拡張、またはPhase 5以降へ送るもの:
 - 欠損処理ルール
 - 学習用データセット
 
+### 2026-06-05時点の進捗
+
+Phase 5 MVPは完了。
+
+進捗目安: 100%
+
+完了または実装済み:
+
+- `apps/api/app/features/`へラベル生成、リーク検知、dataset build、品質チェック、Parquet出力、過去成績集計を実装した
+- `scripts/phase5_build_features.py`で対象期間、場コード、R番号、model view、dry-run、Parquet出力、data root、品質チェックskipを指定できる
+- `pre_race_no_odds`は2026-05-30全場で1080行、45カラムのdataset生成、品質チェック、Parquet保存、schema記録を確認した
+- `pre_race_with_odds`は2026-06-01 場23 1Rで6行、49カラムのdataset生成、品質チェック、Parquet保存、schema記録を確認した
+- `exhibition_with_odds`は2026-06-01 場23 1Rで6行、63カラムのdataset生成、品質チェック、Parquet保存、schema記録を確認した
+- 欠損フラグ列、6艇充足率、必須特徴量欠損率、`target_top2`/`target_top3`整合、Phase 4 status/parser error、Parquet読み戻し検証を実装した
+- 期別成績joinは前期5月1日、後期11月1日を利用可能日の近似としてas-of判定する
+- 直近30/60/90走、コース別、場別の1着率/2連対率/3連対率をshift付きで生成する
+- `ruff check`、`ruff format --check`、`mypy app`、`pytest tests/features -q`、`pytest -q`はpass
+
+Phase 5 MVPの残タスク:
+
+- なし
+
+Phase 6以降へ送るもの:
+
+- LightGBMなどのモデル学習
+- 期待値、買い目生成、バックテスト
+- DB上の永続Feature Storeテーブル
+- Phase 5専用Prefect Flow
+- 単勝以外のオッズ特徴量
+- 記者予想、直接対決、モーター/ボート高度履歴特徴量
+
+参照: `docs/PHASE5_FEATURE_ENGINEERING.md`
+
 ## Phase 6: 機械学習モデル
 
 期間目安: 3週間から6週間
