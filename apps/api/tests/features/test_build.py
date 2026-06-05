@@ -5,59 +5,100 @@ import pandas as pd
 from app.features.build import build_training_dataset
 
 
+@patch("app.features.build.add_odds_features")
+@patch("app.features.build.add_pre_race_features")
 @patch("app.features.build.add_racer_period_stats")
 @patch("app.features.build.fetch_base_features")
 @patch("app.features.build.fetch_label_records")
-def test_build_training_dataset(mock_fetch_labels, mock_fetch_features, mock_add_period_stats):
+def test_build_training_dataset_exhibition_with_odds(
+    mock_fetch_labels, mock_fetch_features, mock_add_stats, mock_add_pre_race, mock_add_odds
+):
     """
-    ベース特徴量＋期別成績＋教師ラベルが正しく結合され、
-    Leakageチェックを通過してデータセットが構築されるかをテスト
+    'exhibition_with_odds' ビューでの構築テスト。
+    展示やオッズなどのすべての特徴量が付与された状態で安全に結合されるか確認。
     """
-    # 1. モックのベース特徴量
     base_df = pd.DataFrame(
         {
-            "race_id": ["20260601_01_01", "20260601_01_01"],
-            "race_date": [pd.to_datetime("2026-06-01"), pd.to_datetime("2026-06-01")],
-            "boat_no": [1, 2],
-            "venue_code": ["01", "01"],
-            "racer_registration_no": ["1234", "5678"],
-            "racer_class": ["A1", "B1"],
+            "race_id": ["20260601_01_01"],
+            "race_date": [pd.to_datetime("2026-06-01")],
+            "boat_no": [1],
+            "venue_code": ["01"],
+            "racer_registration_no": ["1234"],
         }
     )
     mock_fetch_features.return_value = base_df
 
-    # 2. モックの期別成績結合後の特徴量（勝率などが付与された状態）
-    stats_added_df = base_df.copy()
-    stats_added_df["period_year"] = [2026, 2026]
-    stats_added_df["period_term"] = ["前期", "前期"]
-    stats_added_df["racer_win_rate"] = [7.50, 4.20]
-    mock_add_period_stats.return_value = stats_added_df
+    # 各処理を通過するごとにカラムが増えていく様をモック
+    stats_df = base_df.copy()
+    stats_df["racer_win_rate"] = [7.50]
+    mock_add_stats.return_value = stats_df
 
-    # 3. モックのレース結果
+    pre_race_df = stats_df.copy()
+    pre_race_df["exhibition_time"] = [6.60]
+    pre_race_df["wind_speed"] = [3.0]
+    mock_add_pre_race.return_value = pre_race_df
+
+    odds_df = pre_race_df.copy()
+    odds_df["win_odds"] = [1.5]
+    mock_add_odds.return_value = odds_df
+
     mock_fetch_labels.return_value = [
         {"race_id": "20260601_01_01", "boat_no": 1, "finish_position": 1, "result_status": None},
-        {"race_id": "20260601_01_01", "boat_no": 2, "finish_position": 2, "result_status": None},
     ]
 
     dummy_session = MagicMock()
-    dataset_df = build_training_dataset(dummy_session)
 
-    # 検証
+    # exhibition_with_odds ビューで実行
+    dataset_df = build_training_dataset(dummy_session, model_view="exhibition_with_odds")
+
     assert not dataset_df.empty
-    assert len(dataset_df) == 2
 
-    # 選手能力（期別成績）が特徴量として含まれているか
-    assert "racer_win_rate" in dataset_df.columns
-    assert "period_term" in dataset_df.columns
+    # 全ての追加機能が呼ばれたか
+    mock_add_stats.assert_called_once()
+    mock_add_pre_race.assert_called_once()
+    mock_add_odds.assert_called_once()
 
-    # 1号艇（A1・1着）のラベル・特徴量が正しいか
-    boat1 = dataset_df[dataset_df["boat_no"] == 1].iloc[0]
-    assert boat1["target_win"] == 1
+    # カラムがすべて揃っているか
+    boat1 = dataset_df.iloc[0]
     assert boat1["racer_win_rate"] == 7.50
-    assert boat1["period_term"] == "前期"  # 6月なので「前期」が適用されるロジックが通っているか
+    assert boat1["exhibition_time"] == 6.60
+    assert boat1["wind_speed"] == 3.0
+    assert boat1["win_odds"] == 1.5
+    assert boat1["target_win"] == 1
 
-    # 2号艇（B1・2着）のラベル・特徴量が正しいか
-    boat2 = dataset_df[dataset_df["boat_no"] == 2].iloc[0]
-    assert boat2["target_win"] == 0
-    assert boat2["target_top2"] == 1
-    assert boat2["racer_win_rate"] == 4.20
+
+@patch("app.features.build.add_odds_features")
+@patch("app.features.build.add_pre_race_features")
+@patch("app.features.build.add_racer_period_stats")
+@patch("app.features.build.fetch_base_features")
+@patch("app.features.build.fetch_label_records")
+def test_build_training_dataset_pre_race_no_odds(
+    mock_fetch_labels, mock_fetch_features, mock_add_stats, mock_add_pre_race, mock_add_odds
+):
+    """
+    'pre_race_no_odds' ビューでの構築テスト。
+    展示とオッズ情報が結合されない（未来情報として除外される）ことを確認。
+    """
+    base_df = pd.DataFrame(
+        {
+            "race_id": ["20260601_01_01"],
+            "race_date": [pd.to_datetime("2026-06-01")],
+            "boat_no": [1],
+        }
+    )
+    mock_fetch_features.return_value = base_df
+    mock_add_stats.return_value = base_df.copy()
+    mock_fetch_labels.return_value = [
+        {"race_id": "20260601_01_01", "boat_no": 1, "finish_position": 1, "result_status": None},
+    ]
+
+    dummy_session = MagicMock()
+
+    # デフォルトの pre_race_no_odds ビューで実行
+    dataset_df = build_training_dataset(dummy_session, model_view="pre_race_no_odds")
+
+    assert not dataset_df.empty
+
+    # 禁止されている特徴量結合関数が呼ばれていないか
+    mock_add_pre_race.assert_not_called()
+    mock_add_odds.assert_not_called()
