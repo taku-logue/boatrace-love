@@ -1,6 +1,7 @@
 import pandas as pd
 from app.features.labels import generate_labels_df
 
+
 def test_generate_labels_df():
     """正常な完走レコードと、欠場・失格などの異常レコードが正しくラベル化されるかをテスト"""
     mock_records = [
@@ -10,7 +11,12 @@ def test_generate_labels_df():
         {"race_id": "20260601_01_01", "boat_no": 4, "finish_position": 4, "result_status": None},
         # フライングや欠場などで着順がつかなかったケース
         {"race_id": "20260601_01_01", "boat_no": 5, "finish_position": None, "result_status": "F"},
-        {"race_id": "20260601_01_01", "boat_no": 6, "finish_position": None, "result_status": "欠場"},
+        {
+            "race_id": "20260601_01_01",
+            "boat_no": 6,
+            "finish_position": None,
+            "result_status": "欠場",
+        },
     ]
 
     df = generate_labels_df(mock_records)
@@ -19,7 +25,12 @@ def test_generate_labels_df():
     assert isinstance(df, pd.DataFrame)
     assert len(df) == 6
     assert list(df.columns) == [
-        "race_id", "boat_no", "target_win", "target_top2", "target_top3", "exclude_reason"
+        "race_id",
+        "boat_no",
+        "target_win",
+        "target_top2",
+        "target_top3",
+        "exclude_reason",
     ]
 
     # 1着艇の検証
