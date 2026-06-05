@@ -28,7 +28,6 @@ def test_build_training_dataset_exhibition_with_odds(
     )
     mock_fetch_features.return_value = base_df
 
-    # 各処理を通過するごとにカラムが増えていく様をモック
     stats_df = base_df.copy()
     stats_df["racer_win_rate"] = [7.50]
     mock_add_stats.return_value = stats_df
@@ -36,10 +35,16 @@ def test_build_training_dataset_exhibition_with_odds(
     pre_race_df = stats_df.copy()
     pre_race_df["exhibition_time"] = [6.60]
     pre_race_df["wind_speed"] = [3.0]
+    # P1特徴量のモック返り値への追加
+    pre_race_df["exhibition_time_rank"] = [1.0]
+    pre_race_df["exhibition_time_diff"] = [0.0]
     mock_add_pre_race.return_value = pre_race_df
 
     odds_df = pre_race_df.copy()
     odds_df["win_odds"] = [1.5]
+    # P1特徴量のモック返り値への追加
+    odds_df["win_popularity"] = [1.0]
+    odds_df["market_probability"] = [0.666]
     mock_add_odds.return_value = odds_df
 
     mock_fetch_labels.return_value = [
@@ -48,23 +53,26 @@ def test_build_training_dataset_exhibition_with_odds(
 
     dummy_session = MagicMock()
 
-    # exhibition_with_odds ビューで実行
     dataset_df = build_training_dataset(dummy_session, model_view="exhibition_with_odds")
 
     assert not dataset_df.empty
 
-    # 全ての追加機能が呼ばれたか
     mock_add_stats.assert_called_once()
     mock_add_pre_race.assert_called_once()
     mock_add_odds.assert_called_once()
 
-    # カラムがすべて揃っているか
     boat1 = dataset_df.iloc[0]
     assert boat1["racer_win_rate"] == 7.50
     assert boat1["exhibition_time"] == 6.60
     assert boat1["wind_speed"] == 3.0
     assert boat1["win_odds"] == 1.5
     assert boat1["target_win"] == 1
+
+    # P1特徴量の検証
+    assert boat1["exhibition_time_rank"] == 1.0
+    assert boat1["exhibition_time_diff"] == 0.0
+    assert boat1["win_popularity"] == 1.0
+    assert abs(boat1["market_probability"] - 0.666) < 0.01
 
 
 @patch("app.features.build.add_odds_features")
@@ -94,11 +102,9 @@ def test_build_training_dataset_pre_race_no_odds(
 
     dummy_session = MagicMock()
 
-    # デフォルトの pre_race_no_odds ビューで実行
     dataset_df = build_training_dataset(dummy_session, model_view="pre_race_no_odds")
 
     assert not dataset_df.empty
 
-    # 禁止されている特徴量結合関数が呼ばれていないか
     mock_add_pre_race.assert_not_called()
     mock_add_odds.assert_not_called()
