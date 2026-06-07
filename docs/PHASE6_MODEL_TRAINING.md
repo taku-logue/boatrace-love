@@ -1,10 +1,10 @@
 # Phase 6 機械学習モデル設計・評価計画
 
 作成日: 2026-06-06
-更新日: 2026-06-06
-対象ブランチ: `phase5-feature-engineering`
-ステータス: 設計完了 / 実装未着手
-進捗: 0%
+更新日: 2026-06-07
+対象ブランチ: `phase6-model-training`
+ステータス: MVP実装・検証完了
+進捗: 100%（P0/MVP。P1/P2は後続改善候補）
 
 ## 1. 目的
 
@@ -125,7 +125,7 @@ Phase 6 MVPの入力はPhase 5 CLIで生成したParquet。
 
 ```bash
 docker compose exec -T api env PYTHONUNBUFFERED=1 uv run python /scripts/phase5_build_features.py \
-  --from-date 2026-05-30 \
+  --from-date 2026-05-28 \
   --to-date 2026-05-30 \
   --model-view pre_race_no_odds \
   --feature-set-version boat_features_v1
@@ -229,7 +229,7 @@ test : validより後の期間
 - splitごとに少なくとも一定数のレースが必要
 - データが少なすぎる場合は学習を失敗させ、エラー理由を表示する
 
-現在のローカルDBでは、Phase 5で確認済みの教師付きdatasetがまだ小さい。Phase 6実装では、まず小規模datasetでsmoke testを通し、意味のある評価はPhase 3/5で複数日・複数場のdatasetを増やしてから行う。
+ローカルDBの2026-05-28から2026-05-30を使い、432完全レースで時系列splitとbaseline評価を確認した。ただし3日間は性能を確定するには短いため、長期間の期間外評価は後続のモデル改善で行う。
 
 ## 8. 評価指標
 
@@ -265,7 +265,9 @@ Phase 6 MVPでは、学習実行ごとにMLflowへ記録する。
 - `feature_set_version`
 - `target`
 - `dataset_path`
+- `dataset_sha256`
 - `schema_path`
+- `schema_sha256`
 - `train_start_date`
 - `train_end_date`
 - `valid_start_date`
@@ -294,7 +296,7 @@ Phase 6 MVPでは、学習実行ごとにMLflowへ記録する。
 - `feature_importance.csv`
 - 入力schema JSONのcopy
 
-MLflow Tracking URIは既存のMLflowコンテナを使う。READMEのMLflow確認コマンドと整合させる。
+MLflow client/serverは`2.22.2`へ揃える。Tracking serverは`mlruns/mlflow.db`へrun台帳、`mlruns/artifacts/`へartifactを永続化する。READMEのMLflow確認コマンドと整合させる。
 
 ## 10. モデル出力仕様
 
@@ -328,54 +330,54 @@ Phase 6の予測出力は、Phase 7 APIへ渡せる形を意識する。
 | P1 | Phase 6内でできれば入れたい |
 | P2 | Phase 7以降、またはモデル改善フェーズでよい |
 
-### 11.1 P0: 土台
+### 11.1 P0: 土台（完了）
 
-| ID | タスク | 完了条件 |
-|---|---|---|
-| P6-001 | Phase 6用ブランチを作る | `phase6-model-training`などの作業ブランチで開始する |
-| P6-002 | ML依存関係を確認・追加する | `lightgbm`、`scikit-learn`、必要なら`joblib`が`pyproject.toml`とlockに入っている |
-| P6-003 | Phase 6用module構成を作る | `apps/api/app/ml/`と`apps/api/tests/ml/`を追加する |
-| P6-004 | 学習CLIを作る | `scripts/phase6_train_model.py --help`が通る |
-| P6-005 | 出力ディレクトリを整備する | `data/processed/models/.gitkeep`、`data/processed/reports/.gitkeep`を追加する |
+| ID | タスク | 完了条件 | 状態 |
+|---|---|---|---|
+| P6-001 | Phase 6用ブランチを作る | `phase6-model-training`などの作業ブランチで開始する | 完了 |
+| P6-002 | ML依存関係を確認・追加する | `lightgbm`、`scikit-learn`、必要なら`joblib`が`pyproject.toml`とlockに入っている | 完了 |
+| P6-003 | Phase 6用module構成を作る | `apps/api/app/ml/`と`apps/api/tests/ml/`を追加する | 完了 |
+| P6-004 | 学習CLIを作る | `scripts/phase6_train_model.py --help`が通る | 完了 |
+| P6-005 | 出力ディレクトリを整備する | `data/processed/models/.gitkeep`、`data/processed/reports/.gitkeep`を追加する | 完了 |
 
-### 11.2 P0: Dataset読み込み・検証
+### 11.2 P0: Dataset読み込み・検証（完了）
 
-| ID | タスク | 完了条件 |
-|---|---|---|
-| P6-101 | Phase 5 Parquet loaderを作る | dataset pathとschema pathを受け取り、DataFrameを返せる |
-| P6-102 | schema整合を検査する | schema JSONの行数、カラム、dtypeとParquet実体の不整合を検知する |
-| P6-103 | feature/target分離を作る | 除外列、target列、feature列を明示的に返せる |
-| P6-104 | leakage guardを学習前に実行する | 結果系/target系カラムがfeatureに混ざった場合に失敗する |
-| P6-105 | `exclude_reason`処理を固定する | MVPでは`exclude_reason is null`だけを学習対象にする |
+| ID | タスク | 完了条件 | 状態 |
+|---|---|---|---|
+| P6-101 | Phase 5 Parquet loaderを作る | dataset pathとschema pathを受け取り、DataFrameを返せる | 完了 |
+| P6-102 | schema整合を検査する | schema JSONの行数、カラム、dtypeとParquet実体の不整合を検知する | 完了 |
+| P6-103 | feature/target分離を作る | 除外列、target列、feature列を明示的に返せる | 完了 |
+| P6-104 | leakage guardを学習前に実行する | 結果系/target系カラムがfeatureに混ざった場合に失敗する | 完了 |
+| P6-105 | `exclude_reason`処理を固定する | MVPでは`exclude_reason is null`かつ6艇完全レースだけを学習対象にする | 完了 |
 
-### 11.3 P0: Split・前処理
+### 11.3 P0: Split・前処理（完了）
 
-| ID | タスク | 完了条件 |
-|---|---|---|
-| P6-201 | 時系列splitを実装する | `race_date`でtrain/valid/testを分け、同一`race_id`が跨がらない |
-| P6-202 | データ不足エラーを実装する | split不能なdatasetでは理由付きで失敗する |
-| P6-203 | 数値/カテゴリ列を分離する | feature列の型ごとに処理方針を決められる |
-| P6-204 | 前処理設定をartifact化する | feature columns、categorical columns、mapping/configをJSON保存できる |
+| ID | タスク | 完了条件 | 状態 |
+|---|---|---|---|
+| P6-201 | 時系列splitを実装する | `race_date`でtrain/valid/testを分け、同一`race_id`が跨がらない | 完了 |
+| P6-202 | データ不足エラーを実装する | split不能なdatasetでは理由付きで失敗する | 完了 |
+| P6-203 | 数値/カテゴリ列を分離する | feature列の型ごとに処理方針を決められる | 完了 |
+| P6-204 | 前処理設定をartifact化する | feature columns、categorical columns、mapping/configをJSON保存できる | 完了 |
 
-### 11.4 P0: 学習・評価・保存
+### 11.4 P0: 学習・評価・保存（完了）
 
-| ID | タスク | 完了条件 |
-|---|---|---|
-| P6-301 | LightGBM baselineを学習する | `target_win`の二値分類モデルが学習できる |
-| P6-302 | レース内確率正規化を実装する | 同一`race_id`内の`win_probability`合計が1.0に近い |
-| P6-303 | 評価指標を計算する | Log Loss、Brier Score、Race hit rate、probability sum errorを出せる |
-| P6-304 | feature importanceを出力する | CSVまたはJSONで保存できる |
-| P6-305 | model artifactを保存する | `data/processed/models/`へモデルを保存できる |
-| P6-306 | MLflowへ記録する | params、metrics、artifactsがMLflow UIで確認できる |
+| ID | タスク | 完了条件 | 状態 |
+|---|---|---|---|
+| P6-301 | LightGBM baselineを学習する | `target_win`の二値分類モデルが学習できる | 完了 |
+| P6-302 | レース内確率正規化を実装する | 同一`race_id`内の`win_probability`合計が1.0に近い | 完了 |
+| P6-303 | 評価指標を計算する | Log Loss、Brier Score、Race hit rate、probability sum errorを出せる | 完了 |
+| P6-304 | feature importanceを出力する | CSVまたはJSONで保存できる | 完了 |
+| P6-305 | model artifactを保存する | `data/processed/models/`へモデルを保存できる | 完了 |
+| P6-306 | MLflowへ記録する | params、metrics、artifactsがMLflow UIで確認できる | 完了 |
 
-### 11.5 P0: テスト・ドキュメント
+### 11.5 P0: テスト・ドキュメント（完了）
 
-| ID | タスク | 完了条件 |
-|---|---|---|
-| P6-401 | pytestを追加する | loader、split、preprocess、normalization、metricsの基本仕様を固定する |
-| P6-402 | 品質コマンドを通す | `ruff check`、`ruff format --check`、`mypy app`、`pytest`が通る |
-| P6-403 | READMEとロードマップを更新する | 実行コマンド、検証結果、残タスクを反映する |
-| P6-404 | Phase 6 docを更新する | 進捗、完了/未完了、検証ログを反映する |
+| ID | タスク | 完了条件 | 状態 |
+|---|---|---|---|
+| P6-401 | pytestを追加する | loader、split、preprocess、normalization、metricsの基本仕様を固定する | 完了 |
+| P6-402 | 品質コマンドを通す | `ruff check`、`ruff format --check`、`mypy app`、`pytest`が通る | 完了 |
+| P6-403 | READMEとロードマップを更新する | 実行コマンド、検証結果、残タスクを反映する | 完了 |
+| P6-404 | Phase 6 docを更新する | 進捗、完了/未完了、検証ログを反映する | 完了 |
 
 ### 11.6 P1: モデル比較・分析
 
@@ -433,9 +435,56 @@ Phase 6 MVPは、以下をすべて満たしたときに100%完了とする。
 
 ## 14. 注意点
 
-- 現在の確認済みdatasetはモデル性能を判断するには小さい。Phase 6実装では、パイプラインの正しさを優先して検証する。
+- 2026-05-28から2026-05-30の3日分はbaselineの動作検証には使えるが、モデル性能を確定するにはまだ短い。Phase 6ではパイプラインの正しさを優先する。
 - 評価でランダムsplitを使わない。
 - `payouts`や払戻情報をPhase 6の特徴量へ入れない。
 - オッズ込みモデルとオッズなしモデルは必ず分ける。
 - `market_probability`を使う場合は、オッズが取得できた時点の予測という前提をdocとMLflow paramsに残す。
 - 生成済みモデル、レポート、MLflow runはGit管理しない。
+
+## 15. 実装・検証結果
+
+2026-06-07にP0/MVPを完了した。
+
+実装:
+
+- `apps/api/app/ml/dataset.py`: Parquet/schema検証、対象行抽出、6艇完全レース抽出、feature/target分離、leakage guard
+- `apps/api/app/ml/split.py`: `race_date`によるtrain/valid/test分割、レース重複・データ不足検査
+- `apps/api/app/ml/preprocessing.py`: 数値・真偽値・カテゴリ列処理、未知カテゴリ処理、設定JSONの保存・読み戻し
+- `apps/api/app/ml/train.py`: LightGBM二値分類、early stopping、予測、feature importance、modelの保存・読み戻し
+- `apps/api/app/ml/evaluate.py`: レース内確率正規化、Log Loss、Brier Score、Race hit rate、確率合計誤差
+- `apps/api/app/ml/registry.py`: MLflow params、metrics、model bundle、report artifacts記録
+- `scripts/phase6_train_model.py`: 読み込みからMLflow記録までの学習CLI
+- dataset/schemaのSHA-256をevaluation report、model metadata、MLflow paramsへ記録
+
+実データ検証:
+
+| 項目 | 結果 |
+|---|---|
+| Phase 5入力 | 2026-05-28から2026-05-30、2,832行、472レース、45カラム |
+| 学習対象 | `exclude_reason is null`かつ6艇完全、勝者1艇の432レース |
+| train | 2026-05-28、804行、134レース |
+| valid | 2026-05-29、816行、136レース |
+| test | 2026-05-30、972行、162レース |
+| valid Log Loss | 0.365700 |
+| test Log Loss | 0.363987 |
+| test Brier Score | 0.110115 |
+| test Race hit rate | 50.62% |
+| test Probability sum error max | `2.220446049250313e-16` |
+| MLflow run | `daa591bbeaf04bea86b011fbde7c00ef` |
+
+品質検証:
+
+```text
+ruff format --check: 95 files already formatted
+ruff check: All checks passed
+mypy app: 51 source files / no issues
+pytest: 63 passed
+Docker API image build: pass
+Docker内 phase6_train_model.py --help: pass
+Docker内 学習CLI + MLflow記録: pass
+MLflow container再作成後のrun/artifact再取得: pass
+API GET /health: pass
+```
+
+P1/P2のモデル比較、segment評価、Calibration、Optuna、SHAP、Prefect Flow化はMVP完了条件に含めず、Phase 7以降と並行して必要性を判断する。

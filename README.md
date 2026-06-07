@@ -10,7 +10,7 @@ BOATRACE=LOVE MVPのローカル分析ダッシュボード用リポジトリで
 - Phase 3: MVP完了
 - Phase 4: MVP完了
 - Phase 5: MVP完了
-- Phase 6: 設計完了 / 実装未着手
+- Phase 6: MVP完了
 
 ## Git管理状況
 
@@ -288,8 +288,54 @@ docker compose exec -T api env PYTHONUNBUFFERED=1 uv run python /scripts/phase5_
 
 詳細は`docs/PHASE6_MODEL_TRAINING.md`を参照。
 
-- Phase 6は設計完了、実装未着手
-- MVPは`target_win`を目的変数にしたLightGBM二値分類baseline
-- 入力はPhase 5のParquet datasetとschema JSON
-- 学習、時系列split、レース内確率正規化、評価指標、MLflow記録、model artifact保存を完了条件にする
-- 最初の実装では`lightgbm`、`scikit-learn`、必要なら`joblib`の依存追加から始める
+- Phase 6 MVPは完了
+- Phase 5のParquet/schemaを検証し、`exclude_reason is null`かつ6艇完全・勝者1艇のレースを学習対象にする
+- `race_date`でtrain/valid/testを時系列分割し、同一`race_id`を複数splitへ跨がせない
+- `boat_no`は識別子として除外し、枠番特徴量`frame_no`へ変換する
+- LightGBMで`target_win`を学習し、同一レース内の1着確率合計を1へ正規化する
+- Log Loss、Brier Score、Race hit rate、Probability sum errorを評価する
+- model bundle、前処理設定、feature importance、予測Parquet、評価JSONを保存する
+- MLflowへparams、metrics、model、report artifactsを記録する
+- MLflow client/serverは`2.22.2`で揃え、run台帳とartifactは`mlruns/`へ永続化する
+- 2026-05-28から2026-05-30の432完全レースで実走済み
+- test Log Lossは0.363987、Brier Scoreは0.110115、Race hit rateは50.62%
+- `ruff format --check`、`ruff check`、`mypy app`、`pytest 63 passed`、Docker build/CLI実行を確認済み
+
+## Phase 6 実行コマンド
+
+最初に3日以上のPhase 5 datasetを生成する。
+
+```bash
+cd apps/api
+uv run python ../../scripts/phase5_build_features.py \
+  --from-date 2026-05-28 \
+  --to-date 2026-05-30 \
+  --model-view pre_race_no_odds \
+  --feature-set-version boat_features_v1
+```
+
+ローカル実行:
+
+```bash
+cd apps/api
+uv run python ../../scripts/phase6_train_model.py \
+  --dataset ../../data/processed/features/dataset_boat_features_v1_pre_race_no_odds.parquet \
+  --schema ../../data/processed/features/dataset_boat_features_v1_pre_race_no_odds.schema.json \
+  --target target_win \
+  --model-name lgbm_win_v1 \
+  --experiment-name boatrace_phase6_baseline \
+  --tracking-uri http://127.0.0.1:5000
+```
+
+Docker ComposeのAPIコンテナから実行する場合:
+
+```bash
+docker compose exec -T api uv run python /scripts/phase6_train_model.py \
+  --dataset /data/processed/features/dataset_boat_features_v1_pre_race_no_odds.parquet \
+  --schema /data/processed/features/dataset_boat_features_v1_pre_race_no_odds.schema.json \
+  --target target_win \
+  --model-name lgbm_win_v1 \
+  --experiment-name boatrace_phase6_baseline
+```
+
+生成済みdataset、model、report、MLflow runはGit管理しない。P1のオッズ/展示込みモデル比較、segment評価、Calibrationは後続改善候補とする。
