@@ -71,6 +71,7 @@ def fetch_base_features(
     to_date: date | None = None,
     venue_code: str | None = None,
     race_no: int | None = None,
+    race_id: str | None = None,
 ) -> pd.DataFrame:
     query = (
         select(
@@ -100,6 +101,8 @@ def fetch_base_features(
         query = query.where(Race.venue_code == venue_code.zfill(2))
     if race_no is not None:
         query = query.where(Race.race_no == race_no)
+    if race_id is not None:
+        query = query.where(Race.race_id == race_id)
 
     df = _rows_to_df(session.execute(query).fetchall())
     if df.empty:
@@ -395,18 +398,19 @@ def add_odds_features(session: Session, df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def build_training_dataset(
+def build_feature_dataset(
     session: Session,
     from_date: date | None = None,
     to_date: date | None = None,
     model_view: str = "pre_race_no_odds",
     venue_code: str | None = None,
     race_no: int | None = None,
+    race_id: str | None = None,
 ) -> pd.DataFrame:
     if model_view not in MODEL_VIEWS:
         raise ValueError(f"Unknown model_view: {model_view}")
 
-    features_df = fetch_base_features(session, from_date, to_date, venue_code, race_no)
+    features_df = fetch_base_features(session, from_date, to_date, venue_code, race_no, race_id)
     if features_df.empty:
         return features_df
 
@@ -419,6 +423,27 @@ def build_training_dataset(
 
     features_df = add_missing_flags(features_df, model_view)
     validate_no_leakage(features_df)
+    return features_df.reset_index(drop=True)
+
+
+def build_training_dataset(
+    session: Session,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    model_view: str = "pre_race_no_odds",
+    venue_code: str | None = None,
+    race_no: int | None = None,
+) -> pd.DataFrame:
+    features_df = build_feature_dataset(
+        session,
+        from_date=from_date,
+        to_date=to_date,
+        model_view=model_view,
+        venue_code=venue_code,
+        race_no=race_no,
+    )
+    if features_df.empty:
+        return features_df
 
     label_records = fetch_label_records(session, from_date, to_date)
     labels_df = generate_labels_df(label_records)

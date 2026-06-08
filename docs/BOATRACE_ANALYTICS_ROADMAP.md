@@ -1,7 +1,7 @@
 # ボートレース予想分析Webアプリ 開発ロードマップ
 
 作成日: 2026-05-22
-更新日: 2026-06-07
+更新日: 2026-06-08
 
 ## 1. 目的
 
@@ -731,35 +731,87 @@ Phase 6 MVPは完了。
 
 期間目安: 1週間から3週間
 
-### API案
+### 2026-06-08時点の進捗
+
+Phase 7 MVPは完了。
+
+進捗: 100%（P0/MVP。P1/P2は後続改善候補）
+
+Phase 7 MVPでは、Phase 6で作成した`lgbm_win_v1`のmodel bundleをFastAPIから読み込み、指定`race_id`の6艇について1着確率を返すところまでを完了条件にする。買い目生成、期待値、バックテスト、学習APIは後続候補として分ける。
+
+完了内容:
+
+- `phase7-prediction-api`ブランチを作成した
+- `MODEL_ROOT`、`DEFAULT_MODEL_NAME`、`DEFAULT_MODEL_VIEW`、`PREDICTION_CACHE_ENABLED`を設定化した
+- Phase 5 feature builderからlabel結合前の`build_feature_dataset`を切り出した
+- `apps/api/app/prediction/`にmodel store、推論feature整形、prediction service、schema、error contractを実装した
+- `apps/api/app/routers/`に`GET /models/latest`と`GET /races/{race_id}/prediction`を追加した
+- model bundle必須artifact検証、`latest`解決、path traversal防止、preprocessing設定読み戻しを実装した
+- feature列の不足/余剰、model view不一致、raceなし、6艇不足をHTTP status付きで返すようにした
+- Docker Compose API containerへmodel設定を渡し、`/data/processed/models`からmodel bundleを読めるようにした
+- `tests/prediction/`を追加し、model store、feature整形、service、router contractを固定した
+
+実データ証跡:
+
+- model bundle: `data/processed/models/lgbm_win_v1/20260607T144526Z`
+- `GET /models/latest`: HTTP 200、`model_name=lgbm_win_v1`、`model_version=20260607T144526Z`
+- `GET /races/20260528_01_01/prediction`: HTTP 200、6 entries、`probability_sum=1.0`
+- Docker Compose API containerでも同endpointを確認済み
+- `ruff format .`、`ruff check .`、`mypy app`、`pytest 74 passed`を確認した
+
+### API案（P0/MVP）
 
 - `GET /health`
+- `GET /db/health`
+- `GET /version`
+- `GET /models/latest`
+- `GET /races/{race_id}/prediction`
+
+### API案（P1以降）
+
 - `GET /venues/today`
 - `GET /races/today`
 - `GET /races/{race_id}`
 - `GET /races/{race_id}/entries`
 - `GET /races/{race_id}/odds`
-- `GET /races/{race_id}/prediction`
+- `GET /models/{model_name}/{model_version}`
+
+### 後続Phase候補
+
 - `POST /models/train`
-- `GET /models/latest`
 - `GET /backtests`
+- 期待値API
+- 買い目生成API
+- 予測snapshot保存
+- SHAP/explain API
 
 ### 予測レスポンス案
 
 ```json
 {
-  "race_id": "20260522_01_11",
-  "model_version": "lgbm_win_v1",
-  "predicted_at": "2026-05-22T10:30:00+09:00",
+  "race_id": "20260530_23_01",
+  "race_date": "2026-05-30",
+  "venue_code": "23",
+  "race_no": 1,
+  "model_name": "lgbm_win_v1",
+  "model_version": "20260607T144526Z",
+  "model_view": "pre_race_no_odds",
+  "prediction_status": "ok",
+  "predicted_at": "2026-06-08T10:30:00+09:00",
+  "probability_sum": 1.0,
   "entries": [
     {
+      "rank": 1,
       "boat_no": 1,
-      "racer_no": "0000",
-      "win_probability": 0.421,
-      "place2_probability": 0.651,
-      "place3_probability": 0.782,
-      "market_probability": 0.385,
-      "expected_value": 1.09
+      "racer_registration_no": "0000",
+      "racer_name": "選手名",
+      "racer_class": "A1",
+      "raw_win_probability": 0.421,
+      "win_probability": 0.356,
+      "is_missing_period_stats": false,
+      "is_missing_pre_race": false,
+      "is_missing_weather": false,
+      "is_missing_odds": false
     }
   ]
 }
@@ -769,13 +821,47 @@ Phase 6 MVPは完了。
 
 - FastAPIアプリ
 - OpenAPI定義
+- Model store
 - 推論サービス
-- DB接続
+- 推論用feature builder
+- Pydantic schema
 - エラーハンドリング
+- pytest
+- Docker/README実行手順
+
+参照: `docs/PHASE7_PREDICTION_API.md`
 
 ## Phase 8: Webフロントエンド
 
 期間目安: 2週間から4週間
+
+### 2026-06-08時点の進捗
+
+Phase 8 MVPは完了。
+
+進捗: 100%（P0/MVP。P1/P2は後続改善候補）
+
+Phase 8 MVPでは、Phase 7で作成した予測APIをNext.js画面から利用し、指定`raceId`の6艇1着確率を比較できるローカル予測ダッシュボードを完了条件にした。今日の開催一覧、場/日付/Rからの検索、期待値、買い目、バックテスト、model性能画面は後続候補として分ける。
+
+完了内容:
+
+- `phase8-web-frontend`ブランチを作成した
+- `docs/PHASE8_WEB_FRONTEND.md`を追加した
+- Next.js App Routerのトップ画面をPhase 7予測APIへ接続した
+- `GET /health`、`GET /db/health`、`GET /models/latest`、`GET /races/{race_id}/prediction`の取得と表示を実装した
+- `raceId`入力、予測ランキングテーブル、model contract、top pick panelを実装した
+- API失敗時のerror stateを実装した
+- mobile幅ではページ全体を横スクロールさせず、テーブルだけ内部横スクロールにした
+- Playwright E2Eを予測ランキング表示の確認へ更新した
+- `.prettierignore`とWeb `.gitignore`を整理し、生成物をGit/整形対象から外した
+
+実データ証跡:
+
+- `http://localhost:3000?raceId=20260528_01_01`: 6艇の予測ランキング表示を確認
+- model: `lgbm_win_v1` / `20260607T144526Z` / `pre_race_no_odds`
+- desktop Browser確認: `BOATRACE=LOVE`、`raceId=20260528_01_01`、6艇table、API/model表示、ページ横スクロールなし
+- mobile Browser確認: page width 375px、scroll width 375px、tableのみ内部scroll
+- Web整形、ESLint、Docker build、Playwright E2E `1 passed`を確認した
 
 ### 主要画面
 

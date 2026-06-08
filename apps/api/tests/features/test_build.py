@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from app.features.build import build_training_dataset
+from app.features.build import build_feature_dataset, build_training_dataset
 
 
 @patch("app.features.build.add_odds_features")
@@ -131,3 +131,40 @@ def test_build_training_dataset_pre_race_no_odds(
     assert bool(boat1["is_missing_pre_race"]) is False
     assert bool(boat1["is_missing_weather"]) is False
     assert bool(boat1["is_missing_odds"]) is False
+
+
+@patch("app.features.build.add_historical_performance_features")
+@patch("app.features.build.add_racer_period_stats")
+@patch("app.features.build.fetch_base_features")
+@patch("app.features.build.fetch_label_records")
+def test_build_feature_dataset_does_not_fetch_labels(
+    mock_fetch_labels,
+    mock_fetch_features,
+    mock_add_stats,
+    mock_add_history,
+):
+    base_df = pd.DataFrame(
+        {
+            "race_id": ["20260601_01_01"],
+            "race_date": [pd.to_datetime("2026-06-01")],
+            "boat_no": [1],
+            "venue_code": ["01"],
+        }
+    )
+    mock_fetch_features.return_value = base_df
+    mock_add_stats.return_value = base_df.copy()
+    mock_add_history.return_value = base_df.copy()
+
+    dummy_session = MagicMock()
+
+    feature_df = build_feature_dataset(
+        dummy_session,
+        model_view="pre_race_no_odds",
+        race_id="20260601_01_01",
+    )
+
+    assert not feature_df.empty
+    assert "target_win" not in feature_df.columns
+    assert "exclude_reason" not in feature_df.columns
+    assert bool(feature_df.iloc[0]["is_missing_odds"]) is False
+    mock_fetch_labels.assert_not_called()

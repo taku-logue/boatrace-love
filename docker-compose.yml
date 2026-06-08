@@ -21,6 +21,10 @@ services:
     environment:
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-boatrace}:${POSTGRES_PASSWORD:-boatrace_password}@postgres:5432/${POSTGRES_DB:-boatrace_love}
       - BOATRACE_DATA_DIR=/data
+      - MODEL_ROOT=/data/processed/models
+      - DEFAULT_MODEL_NAME=lgbm_win_v1
+      - DEFAULT_MODEL_VIEW=pre_race_no_odds
+      - PREDICTION_CACHE_ENABLED=true
       - PREFECT_API_URL=http://prefect-server:4200/api
     volumes:
       - ./data:/data
